@@ -1,0 +1,75 @@
+"""Composition root: the only place that knows concrete adapters."""
+from dataclasses import dataclass
+
+from .config import Settings
+from .ports import ChatModel, Database, Executor, ImageFetcher, ImageStore, PinSource, ProductSource, WeatherProvider
+from .services.catalog import CatalogService
+from .services.feedback import ProductFeedbackService
+from .services.images import ImageService
+from .services.jobs import JobService
+from .services.links import LinkService
+from .services.outfits import OutfitService
+from .services.preferences import PreferenceService
+from .services.profiles import ProfileService
+from .services.recommendations import RecommendationService
+from .services.styles import StyleService
+from .services.stylist import Stylist
+from .services.users import UserService
+from .services.wardrobe import WardrobeService
+
+
+@dataclass(frozen=True)
+class Container:
+    images: ImageService
+    users: UserService
+    wardrobe: WardrobeService
+    styles: StyleService
+    preferences: PreferenceService
+    profiles: ProfileService
+    recommendations: RecommendationService
+    feedback: ProductFeedbackService
+    links: LinkService
+    outfits: OutfitService
+    jobs: JobService
+    weather: WeatherProvider
+
+
+def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, chat: ChatModel, pins: PinSource,
+                   products: ProductSource, weather: WeatherProvider, executor: Executor) -> Container:
+    stylist = Stylist(chat)
+    images = ImageService(db, store, fetcher)
+    users = UserService(db, images, stylist)
+    wardrobe = WardrobeService(db, users, images, stylist)
+    styles = StyleService(db, pins, stylist)
+    prefs = PreferenceService(db)
+    profiles = ProfileService(db, users, wardrobe, styles, prefs, stylist)
+    catalog = CatalogService(db, products)
+    return Container(
+        images=images, users=users, wardrobe=wardrobe, styles=styles, preferences=prefs, profiles=profiles,
+        recommendations=RecommendationService(db, catalog, profiles, wardrobe, stylist),
+        feedback=ProductFeedbackService(db, images, wardrobe),
+        links=LinkService(db, users, catalog, profiles, wardrobe, stylist),
+        outfits=OutfitService(db, users, wardrobe, images, weather, stylist),
+        jobs=JobService(db, executor), weather=weather,
+    )
+
+
+def build_container(settings: Settings | None = None) -> Container:
+    from apify_client import ApifyClient
+    from supabase import create_client
+
+    from .adapters.apify import ApifyPinSource, ApifyProductSource, ApifyRunner
+    from .adapters.executors import ThreadExecutor
+    from .adapters.featherless import FeatherlessChat
+    from .adapters.supabase import SupabaseDatabase, SupabaseImageStore
+    from .adapters.web import HttpImageFetcher, OpenMeteoWeather
+
+    s = settings or Settings.load()
+    client = create_client(s.supabase_url, s.supabase_key)
+    runner = ApifyRunner(ApifyClient(s.apify_token))
+    return build_services(
+        db=SupabaseDatabase(client), store=SupabaseImageStore(client, s.bucket, s.signed_url_ttl),
+        fetcher=HttpImageFetcher(), chat=FeatherlessChat.create(s.featherless_key, s.vision_model, s.text_model),
+        pins=ApifyPinSource(runner), products=ApifyProductSource(runner), weather=OpenMeteoWeather(),
+        executor=ThreadExecutor(s.job_workers),
+    )

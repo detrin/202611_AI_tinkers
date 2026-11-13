@@ -22,6 +22,46 @@ Secrets are read from environment variables first, then from the macOS Keychain 
 
 You can override the models with `VISION_MODEL` (default `Qwen/Qwen3-VL-30B-A3B-Instruct`) and `TEXT_MODEL` (default `zai-org/GLM-5.3-Flash`). Don't use GLM-5.3-Flash for images: on Featherless it ignores them.
 
+## Architecture (ports & adapters)
+
+```
+backend/app/
+  config.py        Settings + secret loading (env → Keychain)
+  errors.py        NotFound / Conflict / Invalid → 404 / 409 / 422
+  domain.py        value objects: ImageInput, Pin, Product
+  ports.py         Protocols: Database, ChatModel, ImageStore, ImageFetcher, PinSource, ProductSource,
+                   WeatherProvider, Executor
+  adapters/        concrete I/O: supabase.py, featherless.py, apify.py, web.py (HTTP fetch + Open-Meteo), executors.py
+  services/        business logic, depends only on ports
+    stylist.py       every prompt + JSON parsing (the only LLM-aware module)
+    images.py        upload/URL → Storage + `images` row, signed URLs
+    users.py         users + selfie colour analysis
+    wardrobe.py      tag + store items
+    styles.py        Pinterest style library
+    preferences.py   swipe deck + signals
+    profiles.py      style profile
+    catalog.py       product scraping + deduplicated persistence
+    recommendations.py, feedback.py, links.py, outfits.py, jobs.py
+  container.py     composition root: build_services(ports…) and build_container() (real adapters)
+  api/             FastAPI routers (thin), request schemas, DI via app.state.container
+  main.py          create_app(container_factory)
+backend/tests/     unit tests over in-memory fakes (no network)
+```
+
+Rules:
+- Services never import FastAPI or an SDK.
+- Adapters hold no business logic.
+- Routers only translate HTTP to and from service calls.
+
+To swap a provider (for example another LLM or a different scraper), write a new adapter for the port and wire it in `container.py`.
+
+### Tests
+```bash
+uv run pytest          # 46 unit tests, ~0.5 s, all fakes (tests/fakes.py)
+```
+
+`create_app(lambda: build_services(...fakes...))` gives a fully working API in memory, which is useful in notebooks too.
+
 ## Supabase
 
 - **Project:** `wardrobe-stylist`, ref `yyzesrwijgyxyjbawvib`, region `eu-central-1`, org "AI Tinkers 202611" (free plan).
