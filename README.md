@@ -41,10 +41,11 @@ How it is wired. Everything runs on Daniel's Mac behind one Cloudflare Tunnel (`
 | `/api/...` | FastAPI `backend.app.public:app` on `127.0.0.1:8000` | the repo checkout (restart to pick up changes) |
 | everything else | the PWA: `vite preview` of the production build on `:4173` | a separate worktree pinned to `origin/main`: `../goodenough-deploy` |
 | `/cutout` | via the PWA server to `pwa/cutout/server.py` on `127.0.0.1:8010` | the repo checkout |
+| `/api/users/{uid}/outfits/today` | via the PWA server (adds the bearer token), then FastAPI | as above |
 
 - The tunnel can't rewrite paths, so the API runs `backend.app.public:app`, which serves the same app under `/api` (and still under `/` for local use).
 - The PWA calls `/api` on the same origin, so no CORS setup is needed. It is built from `origin/main` only, so half-finished edits in someone's checkout never break the live site.
-- `POST /outfits/today` is not enabled (no `TODAY_API_TOKEN`); the Today page falls back to `/outfits/daily`.
+- `POST /api/users/{uid}/outfits/today` (the calendar-aware agent endpoint) is routed through the PWA server, which adds `TODAY_API_TOKEN` on the Mac so the token never reaches the phone. The token and the `CALENDAR_*` settings are set with `launchctl setenv`. Without them the Today page falls back to `/outfits/daily`.
 - It is only up while that Mac is awake. It runs there because it needs the Keychain secrets and the `claude` login.
 - There is no authentication yet, so don't post the URL publicly. Anyone with it can create users and start paid scraping and LLM jobs.
 
