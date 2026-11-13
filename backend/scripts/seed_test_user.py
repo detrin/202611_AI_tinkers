@@ -1,6 +1,6 @@
 """Create a test user with a real wardrobe: Pinterest photos (via Apify) tagged by the vision model.
 
-Uses the real container (Supabase + Featherless + Apify). Run from repo root:
+Uses the real container (Supabase + OpenRouter LLMs + Apify). Run from repo root:
     uv run python -m backend.scripts.seed_test_user            # wardrobe, wishlist, inspirations
     uv run python -m backend.scripts.seed_test_user --taste    # ...plus taste profile with Claude Opus
 """

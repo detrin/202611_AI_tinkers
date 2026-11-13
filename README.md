@@ -8,7 +8,7 @@ Upload photos of what you own, what you want and looks you love. The app works o
 |---|---|
 | REST API (FastAPI, ports & adapters) | `backend/app/`, spec: [`backend/schemas.md`](backend/schemas.md) |
 | Database + image storage | Supabase project `wardrobe-stylist`, migrations in `supabase/migrations/` |
-| Vision tagging, cheap reasoning | Featherless (`Qwen3-VL-30B` for images, `GLM-5.3-Flash` for text) |
+| Vision tagging, cheap reasoning | OpenRouter: `gemini-3.1-flash-lite` for images, `gpt-oss-120b` on Groq for text (`LLM_PROVIDER=featherless` switches back) |
 | Taste profile | Claude Opus 5.5 via `claude -p` |
 | Scraping (Pinterest, shops, Instagram) | Apify |
 | End-to-end PoC notebook | `examples/` |

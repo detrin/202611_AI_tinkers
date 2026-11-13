@@ -88,6 +88,12 @@ def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, ch
     )
 
 
+def _chat(s: Settings, cls):
+    from .config import LLM_PROVIDERS
+    base_url, _, _, _, text_order = LLM_PROVIDERS[s.llm_provider]
+    return cls.create(base_url, s.llm_key, s.vision_model, s.text_model, {s.text_model: text_order} if text_order else None)
+
+
 def build_container(settings: Settings | None = None) -> Container:
     from apify_client import ApifyClient
     from supabase import create_client
@@ -98,7 +104,7 @@ def build_container(settings: Settings | None = None) -> Container:
     from .adapters.claude_cli import ClaudeCLI
     from .adapters.executors import ThreadExecutor
     from .adapters.fandom import FandomAestheticSource
-    from .adapters.featherless import FeatherlessChat
+    from .adapters.openai_chat import OpenAIChat
     from .adapters.html import FallbackProductSource, HtmlProductSource
     from .adapters.supabase import SupabaseDatabase, SupabaseImageStore
     from .adapters.web import HttpImageFetcher, OpenMeteoWeather
@@ -113,7 +119,7 @@ def build_container(settings: Settings | None = None) -> Container:
     )
     return build_services(
         db=SupabaseDatabase(client), store=SupabaseImageStore(client, s.bucket, s.signed_url_ttl),
-        fetcher=HttpImageFetcher(), chat=FeatherlessChat.create(s.featherless_key, s.vision_model, s.text_model),
+        fetcher=HttpImageFetcher(), chat=_chat(s, OpenAIChat),
         pins=ApifyPinSource(runner), products=FallbackProductSource(HtmlProductSource(), ApifyProductSource(runner)),
         social=ApifyInstagramSource(runner), weather=weather, hourly_weather=weather,
         taste_model=ClaudeCLI(s.taste_model),

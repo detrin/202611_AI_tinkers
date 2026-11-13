@@ -1,6 +1,6 @@
 # Backend spec: Wardrobe stylist API
 
-This is a FastAPI service backed by Supabase (Postgres and Storage), Featherless for the LLMs and Apify for scraping. The Python notebook is the client for now, with no web UI. Interactive docs are at `http://localhost:8000/docs` while the server runs.
+This is a FastAPI service backed by Supabase (Postgres and Storage), OpenRouter (Groq for fast text) for the LLMs and Apify for scraping. The Python notebook is the client for now, with no web UI. Interactive docs are at `http://localhost:8000/docs` while the server runs.
 
 ## Run
 
@@ -20,7 +20,7 @@ Secrets are read from environment variables first, then from the macOS Keychain 
 | `SUPABASE_ACCESS_TOKEN` | Management API (migrations), not used at runtime |
 | `SUPABASE_DB_PASSWORD` | Postgres password, not used at runtime |
 
-You can override the models with `VISION_MODEL` (default `Qwen/Qwen3-VL-30B-A3B-Instruct`) and `TEXT_MODEL` (default `zai-org/GLM-5.3-Flash`). Don't use GLM-5.3-Flash for images: on Featherless it ignores them.
+LLM backend: `LLM_PROVIDER=openrouter` (default; key `OPENROUTER_API_KEY`, vision `google/gemini-3.1-flash-lite`, text `openai/gpt-oss-120b` pinned to Groq) or `featherless` (key `FEATHERLESS_API_KEY`, `Qwen/Qwen3-VL-30B-A3B-Instruct` + `zai-org/GLM-5.3-Flash`). Override single models with `VISION_MODEL` / `TEXT_MODEL`. Measured on 2026-11-13 with the real prompts: tagging a photo takes ~1.2 s on OpenRouter vs ~18 s on Featherless, and product ranking ~4.5 s on Groq gpt-oss-120b, while GLM-5.3-Flash returned no JSON after ~75 s.
 
 ## Architecture (ports & adapters)
 
@@ -31,7 +31,7 @@ backend/app/
   domain.py        value objects: ImageInput, Pin, Product, SocialPost
   ports.py         Protocols: Database, ChatModel, ImageStore, ImageFetcher, PinSource, ProductSource,
                    SocialSource, WeatherProvider, Executor
-  adapters/        concrete I/O: supabase.py, featherless.py, apify.py (Pinterest, e-commerce, Instagram),
+  adapters/        concrete I/O: supabase.py, openai_chat.py (OpenRouter/Featherless), apify.py (Pinterest, e-commerce, Instagram),
                    html.py (JSON-LD/OpenGraph product pages + Apify fallback), web.py (HTTP fetch + Open-Meteo), executors.py
   services/        business logic, depends only on ports
     stylist.py       every prompt + JSON parsing (the only LLM-aware module)
@@ -290,7 +290,7 @@ It also keeps **current** style (what they own and wear) apart from **aspiration
 
 The Today endpoint uses an internal MCP session to read the calendar, hourly weather, owned and available
 clothes, recent outfits, and the user's usual transport. The backend gathers these inputs in parallel.
-Featherless picks the outfit and can request one venue lookup through Apify MCP when enabled.
+The text model picks the outfit and can request one venue lookup through Apify MCP when enabled.
 The fallback uses the existing stylist with the same availability rules. The endpoint saves the outfit
 in the existing table and returns event context and tool summaries with the response. A forecast or
 calendar failure appears as an unavailable tool step. If both pickers fail, the endpoint returns
@@ -321,8 +321,8 @@ The taste profile uses Claude Opus 5.5 through `claude -p --json-schema` (`adapt
 
 | Purpose | Service | Notes |
 |---|---|---|
-| Item tagging, selfie colour analysis, style summary, link verdict | Featherless `Qwen/Qwen3-VL-30B-A3B-Instruct` | images are sent as base64 or URLs |
-| Profile, ranking, outfit | Featherless `zai-org/GLM-5.3-Flash` | JSON-only prompts, parsed leniently |
+| Item tagging, selfie colour analysis, style summary, link verdict | OpenRouter `google/gemini-3.1-flash-lite` (~1.2 s/photo) | images are sent as base64 or URLs |
+| Profile, ranking, outfit | OpenRouter `openai/gpt-oss-120b` pinned to Groq (~4.5 s ranking) | JSON-only prompts, parsed leniently |
 | Pinterest | Apify `epctex/pinterest-scraper` | ~$0.0015 per pin |
 | Instagram posts | Apify `apify/instagram-scraper` | `directUrls` + `resultsType=posts`; public profiles only |
 | Products (search and links) | JSON-LD/OpenGraph HTML parse, then Apify `apify/e-commerce-scraping-tool` | `keyword`+`marketplaces` (Etsy works well; M&S didn't), or `detailsUrls` for any shop |
