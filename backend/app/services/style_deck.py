@@ -27,10 +27,12 @@ EXPLOIT_REPEAT_PENALTY = 0.15  # per pin of the same style already in this batch
 STOP = {"a", "an", "the", "and", "or", "with", "of", "in", "style", "aesthetic", "core", "look", "looks", "outfit",
         "outfits", "fashion", "inspo", "inspiration", "wear", "for", "men", "women", "mens", "womens"}
 
-# (weight per mention) of each evidence source; negative = pushes away
-W_TASTE_ASPIRATION, W_TASTE_CURRENT, W_TASTE_AVOID = 1.0, 0.5, -0.8
-W_INSTAGRAM, W_INSTAGRAM_AVOID = 0.5, -0.5
-W_INSPIRATION, W_WANTED, W_OWNED = 0.4, 0.3, 0.15
+# Positive sources have a weight BUDGET shared by all their terms (a user with 40 wardrobe tags must not drown out
+# 4 inspiration looks); style mixes share it by percent. Avoid terms are deliberate negatives, so they count per term.
+B_TASTE_ASPIRATION, B_TASTE_CURRENT, B_INSTAGRAM = 2.0, 1.0, 1.0
+B_INSPIRATION, B_WANTED, B_OWNED = 1.5, 0.8, 0.6
+W_TASTE_AVOID, W_INSTAGRAM_AVOID = -0.8, -0.5
+DESC_MATCH = 0.3   # max credit when a term only hits a style's description/key pieces, not its name
 
 
 def tokens(text) -> set[str]:
@@ -81,24 +83,29 @@ def match(style: Row, term: str) -> float:
         return 0.0
     names, desc = style_terms(style)
     by_name = max((len(t & n) / len(t | n) for n in names), default=0.0)
-    by_desc = 0.5 * len(t & desc) / len(t)
+    by_desc = DESC_MATCH * len(t & desc) / len(t)
     return max(by_name, by_desc)
+
+
+def _shared(terms: list[str], budget: float, source: str) -> list[tuple[str, float, str]]:
+    return [(t, budget / len(terms), source) for t in terms] if terms else []
 
 
 def evidence_terms(ctx: Row) -> list[tuple[str, float, str]]:
     """(term, weight, source) from everything the user provided. `ctx` keys are all optional."""
     out: list[tuple[str, float, str]] = []
     taste = ctx.get("taste") or {}
-    for view, w in (("aspirational_style", W_TASTE_ASPIRATION), ("current_style", W_TASTE_CURRENT)):
+    for view, budget in (("aspirational_style", B_TASTE_ASPIRATION), ("current_style", B_TASTE_CURRENT)):
         for m in (taste.get(view) or {}).get("style_mix") or []:
-            out.append((m.get("style", ""), w * (m.get("percent") or 50) / 100, f"taste profile ({view.split('_')[0]})"))
+            out.append((m.get("style", ""), budget * (m.get("percent") or 50) / 100, f"taste profile ({view.split('_')[0]})"))
     out += [(t, W_TASTE_AVOID, "taste profile (avoid)") for t in taste.get("avoid") or []]
     ig = ctx.get("instagram") or {}
-    out += [(t, W_INSTAGRAM, "Instagram") for t in ig.get("style_tags") or []]
+    out += _shared(ig.get("style_tags") or [], B_INSTAGRAM, "Instagram")
     out += [(t, W_INSTAGRAM_AVOID, "Instagram (avoid)") for t in ig.get("avoid_tags") or []]
-    out += [(t, W_INSPIRATION, "inspiration looks") for look in ctx.get("inspirations") or [] for t in look.get("style_tags") or []]
-    out += [(t, W_WANTED, "wishlist") for i in ctx.get("wanted") or [] for t in i.get("style_tags") or []]
-    out += [(t, W_OWNED, "wardrobe") for i in ctx.get("owned") or [] for t in i.get("style_tags") or []]
+    out += _shared([t for look in ctx.get("inspirations") or [] for t in look.get("style_tags") or []],
+                   B_INSPIRATION, "inspiration looks")
+    out += _shared([t for i in ctx.get("wanted") or [] for t in i.get("style_tags") or []], B_WANTED, "wishlist")
+    out += _shared([t for i in ctx.get("owned") or [] for t in i.get("style_tags") or []], B_OWNED, "wardrobe")
     return out
 
 
@@ -138,7 +145,9 @@ def reason(b: StyleBelief, mode: str) -> str:
                 f"we're unsure ({b.mean:.0%} chance you like it)")
     if seen:
         return f"You liked {b.likes} of {seen} {b.name} looks"
-    return f"{b.name} matches your " + (", ".join(b.evidence[:2]) if b.evidence else "profile")
+    if b.evidence:
+        return f"{b.name} matches your " + " and ".join(b.evidence[:2])
+    return f"A starting point: no signal about {b.name} yet"
 
 
 def pick_pin(candidates: list[Row], mode: str, liked_terms: set[str], rng: random.Random) -> Row:

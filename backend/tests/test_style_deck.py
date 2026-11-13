@@ -40,6 +40,8 @@ def test_explore_targets_uncertainty_and_exploit_targets_likes():
     assert (explore[0]["style_id"], explore[0]["mode"]) == ("s2", "explore")
     assert (exploit[0]["style_id"], exploit[0]["mode"]) == ("s1", "exploit")
     assert "liked 8 of 9" in exploit[0]["reason"] and "Exploring Gorpcore" in explore[0]["reason"]
+    fresh = next_pins({"s3": StyleBelief("s3", "Bohemian")}, {"s3": _pins("s3", 1)}, 1, 0.0, set(), random.Random(0))
+    assert fresh[0]["reason"] == "A starting point: no signal about Bohemian yet"
 
 
 def test_half_explore_half_exploit_and_batch_spans_styles():
