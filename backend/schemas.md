@@ -163,8 +163,18 @@ How each feature uses them:
 ### Preferences (swipe game)
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| GET | `/users/{uid}/swipe-deck` | `?n=20` | unseen pins, rotating through the styles in turn |
-| POST | `/users/{uid}/swipes` | `[{pin_id, liked}]` | `{saved}` |
+| GET | `/users/{uid}/swipe-deck` | `?n=20&explore=0.5&seed=` | next unseen pins `[{id, image_url, pin_url, title, style_id, style_name, mode: explore\|exploit, p_like, uncertainty, reason}]`; served pins are marked seen and never served again |
+| GET | `/users/{uid}/next-styles` | `?k=6&explore=0.2` | same thing for the recommendation page (mostly exploit) |
+| GET | `/users/{uid}/style-beliefs` | | per style: `p_like, uncertainty, likes, dislikes, prior, prior_from[], unseen_pins` |
+| POST | `/users/{uid}/swipes` | `[{pin_id, liked, source?: deck\|recommendations}]` | `{saved}`; the swipe inherits the pin's explore/exploit `mode` |
+| GET | `/users/{uid}/swipes` | `?liked=true\|false` | the "interested" / "not interested" boards (pins with image + style, newest first). Kept apart from the wardrobe |
+| POST | `/styles/pins/fill` | `{per_style=12, only_missing=true, style_ids?}` | **job**: Pinterest pins for the existing library styles (no new style rows) |
+
+How the deck picks pins (`services/style_deck.py`, a Beta-Bernoulli bandit over styles, no LLM call):
+- **Prior per style** comes from everything the user gave us. Explicit style feedback (`user_style_feedback`) overrides everything else. The other sources are the Opus taste profile (aspirational/current style mix, avoid list), the Instagram `style_profile`, inspiration-look tags, and wishlist/owned item tags. Evidence terms are matched to style names, aliases and key pieces, and together count as 4 pseudo-swipes.
+- **Update:** each like/dislike on a pin of that style.
+- **Each slot** is `explore` with probability `explore`. Explore picks the style with the highest posterior variance (the swipe we learn most from), then a random unseen pin. Otherwise it's `exploit`: the style with the highest p(like), then the pin whose title is closest to liked pins. Repeats within one batch are penalised, so a batch spans several styles.
+- Styles that don't fit the user's `fit_prefs.audience` (menswear/womenswear) are skipped.
 
 ### Profile
 | Method | Path | Returns |
