@@ -4,7 +4,7 @@ import { api, ApiError } from '../api'
 import { errorText, eventPrompt, itemName, profileLine, sentences, title, todayNote, weatherLine } from '../format'
 import { getLastOutfit, getOccasion, getProfiles, getSettings, saveLastOutfit, saveOccasion, today } from '../store'
 import type { Item, Occasion, Outfit } from '../types'
-import { ItemSheet, Notice, Sheet } from '../ui'
+import { ItemSheet, Notice, Photo, Sheet } from '../ui'
 import CheckLook from './Check'
 
 export default function Today({ active, version }: { active: boolean; version: number }) {
@@ -19,6 +19,8 @@ export default function Today({ active, version }: { active: boolean; version: n
   const [openItem, setOpenItem] = useState<Item | null>(null)
   const [checking, setChecking] = useState(false)
   const started = useRef(false)
+  // Outfits already shown in this session, so swiping one away never brings the same one back.
+  const shown = useRef<string[]>(saved.current ? [comboKey(saved.current.outfit.item_ids)] : [])
 
   const profiles = getProfiles()
   const profile = profiles.find((p) => p.profile_id === occasion.profile_id)
@@ -28,14 +30,23 @@ export default function Today({ active, version }: { active: boolean; version: n
     setError('')
     try {
       const prof = getProfiles().find((p) => p.profile_id === occ.profile_id)
+      const seen = shown.current.slice(-4)
+      const daily = () =>
+        api.dailyOutfit(
+          eventPrompt(occ, prof, avoid) +
+            (seen.length ? `. Already rejected today, never suggest these exact combinations again: ${seen.map((c) => `[${c}]`).join(' ')}` : ''),
+        )
       let next
       try {
         next = await api.todayOutfit(todayNote(occ, prof))
       } catch (e) {
         // 404: endpoint not deployed. 401/503: no token configured. 422: rejected input. Use the simpler picker.
         if (!(e instanceof ApiError) || ![401, 404, 405, 422, 503].includes(e.status)) throw e
-        next = await api.dailyOutfit(eventPrompt(occ, prof, avoid))
+        next = await daily()
       }
+      // Retry once when the model returns no usable items, or repeats an outfit that was already swiped away.
+      if (next.items.length === 0 || shown.current.includes(comboKey(next.item_ids))) next = await daily()
+      shown.current.push(comboKey(next.item_ids))
       setOutfit(next)
       setSelected(false)
       setStale(false)
@@ -170,7 +181,12 @@ export default function Today({ active, version }: { active: boolean; version: n
 
       {!loading && outfit && outfit.items.length > 0 && (
         <>
-          <OutfitBoard items={outfit.items} onOpen={setOpenItem} />
+          <OutfitBoard
+            items={outfit.items}
+            onOpen={setOpenItem}
+            onSwipe={(liked) => (liked ? wear() : generate(occasion, outfit.item_ids))}
+          />
+          {!selected && <p className="hint center">Swipe right to wear it, left for another.</p>}
 
           <section className="why">
             <h3>Why this outfit?</h3>
@@ -253,31 +269,55 @@ export default function Today({ active, version }: { active: boolean; version: n
   )
 }
 
+const comboKey = (ids: string[]) => [...ids].sort().join(',')
+
 const SLOT_ORDER = ['outerwear', 'top', 'dress', 'bottom', 'shoes', 'accessory']
 
-/** The outfit laid out the way it is worn: top over trousers over shoes, jacket alongside. */
-function OutfitBoard({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
+/** The outfit as square cards, like My Closet, ordered from outer layer to shoes. The whole set can be swiped. */
+function OutfitBoard({ items, onOpen, onSwipe }: { items: Item[]; onOpen: (i: Item) => void; onSwipe: (liked: boolean) => void }) {
+  const [dx, setDx] = useState(0)
+  const start = useRef<number | null>(null)
+  const dragged = useRef(false)
+  const lean = Math.max(-1, Math.min(1, dx / 90))
+  const end = () => {
+    if (start.current === null) return
+    start.current = null
+    if (Math.abs(dx) > 90) onSwipe(dx > 0)
+    setDx(0)
+  }
   const sorted = [...items].sort((a, b) => SLOT_ORDER.indexOf(a.category || '') - SLOT_ORDER.indexOf(b.category || ''))
-  const seen: Record<string, number> = {}
-  const hasOuter = items.some((i) => i.category === 'outerwear')
   return (
     <div className="outfit">
-      <div className={`board ${hasOuter ? 'with-outer' : ''}`}>
-        {sorted.map((item) => {
-          const cat = SLOT_ORDER.includes(item.category || '') ? item.category! : 'accessory'
-          const n = (seen[cat] = (seen[cat] ?? -1) + 1)
-          return (
-            <button key={item.id} className={`slot ${cat} n${n}`} onClick={() => onOpen(item)} aria-label={itemName(item)}>
-              {item.image_url ? <img src={item.image_url} alt={itemName(item)} /> : <span>{itemName(item)}</span>}
-            </button>
-          )
-        })}
-      </div>
-      <div className="chips wrap pieces">
+      <div
+        className="outfit-cards"
+        style={{ transform: `translateX(${dx}px) rotate(${lean * 4}deg)`, transition: start.current === null ? 'transform 180ms ease-out' : 'none' }}
+        onPointerDown={(e) => {
+          start.current = e.clientX
+          dragged.current = false
+        }}
+        onPointerMove={(e) => {
+          if (start.current === null) return
+          const d = e.clientX - start.current
+          if (Math.abs(d) > 8) dragged.current = true
+          setDx(d)
+        }}
+        onPointerUp={end}
+        onPointerLeave={end}
+        onPointerCancel={end}
+        onClickCapture={(e) => {
+          // A drag must not also open the piece under the finger.
+          if (dragged.current) e.stopPropagation()
+        }}
+      >
+        {lean > 0.3 && <span className="stamp like">Wear</span>}
+        {lean < -0.3 && <span className="stamp skip">Another</span>}
         {sorted.map((item) => (
-          <button key={item.id} className="chip" onClick={() => onOpen(item)}>
-            {itemName(item)}
-            {item.colors?.[0] && <small> · {title(item.colors[0])}</small>}
+          <button key={item.id} className="card" onClick={() => onOpen(item)}>
+            <Photo src={item.image_url} alt={itemName(item)} />
+            <div className="card-body">
+              <strong>{itemName(item)}</strong>
+              <span>{[title(item.category), title(item.colors?.[0])].filter(Boolean).join(' · ')}</span>
+            </div>
           </button>
         ))}
       </div>

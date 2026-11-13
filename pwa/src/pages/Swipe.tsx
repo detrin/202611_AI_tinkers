@@ -70,7 +70,7 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
         <span className="muted">{count.total > 0 && `${count.liked} liked of ${count.total}`}</span>
       </header>
       <div>
-        <h1>Find your taste</h1>
+        <h1>What you like</h1>
         <p className="lead">Like or skip. A few swipes are enough to sharpen your style.</p>
       </div>
       {error && <Notice kind="error">{error}</Notice>}

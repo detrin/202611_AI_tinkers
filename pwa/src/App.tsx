@@ -27,7 +27,15 @@ export default function App() {
   }, [shared])
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      // A page that has just been opened inside a tab (a detail, the swipe deck, back to the list) starts at its top.
+      onAnimationStart={(e) => {
+        if (e.animationName === 'page-in' && (e.target as HTMLElement).classList.contains('page')) {
+          ;(e.target as HTMLElement).closest('main')?.scrollTo(0, 0)
+        }
+      }}
+    >
       {/* All four pages stay mounted so switching tabs never loses state. */}
       <main hidden={tab !== 'today'}><Today active={tab === 'today'} version={version} /></main>
       <main hidden={tab !== 'closet'}><Closet active={tab === 'closet'} version={version} /></main>

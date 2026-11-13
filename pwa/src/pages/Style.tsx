@@ -88,7 +88,7 @@ export default function Style({ active, version }: { active: boolean; version: n
           <Sparkles size={22} />
         </span>
         <div>
-          <strong>Find your taste</strong>
+          <strong>What you like</strong>
           <span>Swipe looks you like. It takes a minute.</span>
           {liked.length > 0 && (
             <div className="thumbs">

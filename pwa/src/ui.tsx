@@ -1,15 +1,24 @@
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { isAvailable, itemName, itemSub, title } from './format'
 import type { Item } from './types'
 
 export function Sheet({ title: heading, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  // Closing plays the slide-down first, then tells the parent to unmount the sheet.
+  const [closing, setClosing] = useState(false)
+  const timer = useRef(0)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const close = () => {
+    if (closing) return
+    setClosing(true)
+    timer.current = window.setTimeout(onClose, 190)
+  }
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className={`sheet-backdrop ${closing ? 'closing' : ''}`} onClick={close}>
       <div className="sheet" role="dialog" aria-label={heading} onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <h2>{heading}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={close} aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -20,7 +29,9 @@ export function Sheet({ title: heading, onClose, children }: { title: string; on
 }
 
 export function Photo({ src, alt }: { src: string | null; alt: string }) {
-  return <div className="photo">{src ? <img src={src} alt={alt} loading="lazy" /> : <span>{alt}</span>}</div>
+  // Cut-out garments are transparent PNGs: show the whole piece on white instead of cropping it to fill.
+  const cut = !!src && /\.png(\?|$)/i.test(src)
+  return <div className={`photo ${cut ? 'cut' : ''}`}>{src ? <img className="fade" src={src} alt={alt} loading="lazy" onLoad={(e) => e.currentTarget.classList.add('in')} onError={(e) => e.currentTarget.classList.add('in')} /> : <span>{alt}</span>}</div>
 }
 
 export function Availability({ item }: { item: Item }) {

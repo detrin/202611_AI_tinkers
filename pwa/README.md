@@ -15,6 +15,18 @@ Open Settings in the app and paste a user id (ask Dan for the seeded test user),
 The browser only talks to the Vite server; `/api/*` is forwarded to `BACKEND_URL`. That means the backend needs no CORS setup, and one HTTPS tunnel covers both the app and the API.
 
 To use the Today calendar flow, run Vite with the same `TODAY_API_TOKEN` as the backend. Set `VITE_USER_ID` to the demo user ID or select that user in Settings. For a shared demo, use a dedicated calendar with demo events. Keep the calendar URL and token in server-side configuration.
+### Garment cutout service (run this too)
+
+```bash
+uv run pwa/cutout/server.py           # from the repo root, http://localhost:8010
+```
+
+When a photo is added to My Closet, the app first sends it here and gets back the garment alone as a transparent
+PNG: no person, no room. That PNG is what gets uploaded and tagged. The Today screen lays those cutouts out as one
+outfit. If this service is not running, the original photo is uploaded and everything else still works.
+
+The first start downloads two segmentation models (about 350 MB). After that a photo takes one to two seconds on CPU.
+It has its own dependencies (declared at the top of the file), so it does not touch the backend's `pyproject.toml`.
 
 ### Without the real backend
 

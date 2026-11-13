@@ -202,19 +202,25 @@ h3 { font-size: 15px; font-weight: 650; }
 
 /* outfit board: always light, so photos on white backgrounds blend into it in both themes */
 .outfit { display: flex; flex-direction: column; gap: 12px; }
-.board { position: relative; aspect-ratio: 4 / 5; border-radius: 24px; background: #efeee9; overflow: hidden; }
+.board { position: relative; aspect-ratio: 1 / 1.08; border-radius: 24px; background: #efeee9; overflow: hidden; }
 .slot { position: absolute; display: grid; place-items: center; color: #6f6e69; font-size: 13px; }
-.slot img { width: 100%; height: 100%; object-fit: contain; mix-blend-mode: multiply; filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.12)); }
-.slot.top { left: 17%; top: 4%; width: 66%; height: 45%; z-index: 3; }
-.slot.bottom { left: 27%; top: 40%; width: 46%; height: 45%; z-index: 2; }
-.slot.shoes { left: 35%; top: 84%; width: 30%; height: 14%; z-index: 4; }
-.slot.dress { left: 20%; top: 4%; width: 60%; height: 80%; z-index: 2; }
-.slot.accessory { left: 4%; top: 4%; width: 22%; height: 20%; z-index: 5; }
-.slot.outerwear { left: 50%; top: 6%; width: 47%; height: 50%; z-index: 1; }
-.with-outer .slot.top { left: 3%; width: 56%; }
-.with-outer .slot.bottom { left: 9%; width: 44%; }
-.with-outer .slot.shoes { left: 16%; }
-.with-outer .slot.dress { left: 3%; width: 52%; }
+/* Blend on the slot, not the image: each slot is its own stacking context, so this is what lets the white
+   background of an uncut product photo disappear into the board and the pieces underneath show through. */
+.slot { mix-blend-mode: multiply; }
+.slot img { width: 100%; height: 100%; object-fit: contain; }
+.slot.cut { mix-blend-mode: normal; }
+.slot.cut img { filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.12)); }
+.slot.top { left: 14%; top: 4%; width: 60%; height: 47%; z-index: 3; }
+.slot.bottom { left: 22%; top: 42%; width: 44%; height: 55%; z-index: 2; }
+.slot.shoes { left: 64%; top: 72%; width: 32%; height: 24%; z-index: 4; }
+.slot.shoes img { object-position: center bottom; }
+.slot.dress { left: 16%; top: 4%; width: 52%; height: 92%; z-index: 2; }
+.slot.accessory { left: 72%; top: 5%; width: 22%; height: 20%; z-index: 5; }
+.slot.outerwear { left: 50%; top: 5%; width: 47%; height: 50%; z-index: 1; }
+.with-outer .slot.top { left: 3%; width: 54%; }
+.with-outer .slot.bottom { left: 8%; }
+.with-outer .slot.dress { left: 3%; }
+.with-outer .slot.accessory { top: 56%; left: 76%; height: 14%; }
 /* a second piece of the same kind sits to the side instead of on top of the first */
 .slot.n1 { transform: translate(38%, 8%) scale(0.8); z-index: 0; }
 .slot.accessory.n1 { transform: translateY(110%); }
@@ -298,3 +304,17 @@ h3 { font-size: 15px; font-weight: 650; }
 .swap-row figure { flex: none; width: 96px; margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); }
 .swap-row .photo { border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .flood { clip-path: none; } }
+/* cut-out garments: whole piece, on white, in both themes */
+.photo.cut { background: #ffffff; position: relative; }
+.photo.cut img { position: absolute; inset: 0; object-fit: contain; padding: 8%; }
+
+.board { touch-action: pan-y; user-select: none; }
+.board .slot img { pointer-events: none; -webkit-user-drag: none; }
+.board .stamp { z-index: 9; }
+.hint.center { text-align: center; }
+
+/* today's outfit as closet-style square cards */
+.outfit-cards { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; touch-action: pan-y; user-select: none; }
+.outfit-cards .photo { background: #ffffff; }
+.outfit-cards .photo img { pointer-events: none; -webkit-user-drag: none; }
+.outfit-cards .stamp { z-index: 9; }

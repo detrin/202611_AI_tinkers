@@ -18,15 +18,20 @@ function save(key: string, value: unknown) {
   }
 }
 
+/** The demo user on the shared backend (GET /users/demo-user). Used until another id is set in Settings. */
+const DEMO_USER_ID = '8b63ae0d-35e8-4cc7-8896-f1785c47d54c'
+// Bump the key to make every phone forget an older user id and pick up the default again.
+const SETTINGS_KEY = 'settings-v2'
+
 export interface Settings {
   apiBase: string
   userId: string
 }
 
 export const getSettings = (): Settings =>
-  load('settings', { apiBase: '/api', userId: (import.meta.env.VITE_USER_ID as string | undefined) || '' })
+  load(SETTINGS_KEY, { apiBase: '/api', userId: (import.meta.env.VITE_USER_ID as string | undefined) || DEMO_USER_ID })
 export const saveSettings = (s: Settings) => {
-  save('settings', s)
+  save(SETTINGS_KEY, s)
   identify(s.userId)
 }
 

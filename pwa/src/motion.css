@@ -1,0 +1,102 @@
+/*
+ * App shell and motion. Loaded after styles.css and kept separate from it on purpose:
+ * layout that makes the PWA behave like a native app (nothing but the page content scrolls)
+ * and every transition live here. Animate transform and opacity only, so it all stays on the compositor.
+ */
+:root {
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --fast: 120ms;
+  --base: 220ms;
+  --slow: 320ms;
+}
+
+/* ---------- shell: the document never scrolls, only the active page does ---------- */
+html, body, #root { height: 100%; }
+html { overflow: hidden; overscroll-behavior: none; touch-action: pan-x pan-y; }
+body { position: fixed; inset: 0; min-height: 0; overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+.app { position: relative; height: 100%; min-height: 0; overflow: hidden; }
+
+.app > main {
+  position: absolute;
+  inset: 0 0 calc(var(--tabbar) + env(safe-area-inset-bottom)) 0;
+  overflow: hidden auto;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  transition: opacity var(--base) var(--ease), transform var(--base) var(--ease);
+}
+.app > main::-webkit-scrollbar { display: none; }
+/* Hidden tabs stay laid out (so each keeps its own scroll position) and fade out quickly. */
+.app > main[hidden] {
+  display: block !important;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--fast) ease-out, transform 0s var(--fast), visibility 0s var(--fast);
+}
+
+/* The tab bar sits below the scroller, so it needs no blur and pages need no room for it. */
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; transform: none; max-width: none; background: var(--bg); backdrop-filter: none; user-select: none; -webkit-user-select: none; }
+.app > main .page { padding-bottom: 24px; min-height: 100%; }
+.swipe-page { min-height: 100%; }
+/* The swipe deck fits the screen without scrolling. */
+.swipe-stack, .swipe-card.skeleton { max-height: max(260px, calc(100dvh - var(--tabbar) - 300px - env(safe-area-inset-top) - env(safe-area-inset-bottom))); }
+.swipe-card.skeleton { width: 100%; }
+
+/* Inner scrollers never hand their scroll on to what is behind them. */
+.sheet, .check { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.chips, .swap-row { overscroll-behavior-x: contain; }
+.sheet-backdrop { touch-action: none; }
+.sheet { touch-action: pan-y; }
+
+/* ---------- pages ---------- */
+.page { animation: page-in var(--base) var(--ease) backwards; }
+@keyframes page-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- press feedback ---------- */
+button, .chip, .card, .source, .toggle, summary { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+button, .source {
+  user-select: none; -webkit-user-select: none;
+  transition: transform var(--fast) ease-out, background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out, opacity 180ms ease-out;
+}
+button:active:not(:disabled), .source:active { transform: scale(0.97); }
+.icon-btn:active:not(:disabled), .add-btn:active:not(:disabled), .round:active:not(:disabled) { transform: scale(0.9); }
+.card:active:not(:disabled), .profile-card:active, .discover:active, .check-entry:active { transform: scale(0.985); }
+.icon-btn:active { background: var(--soft); }
+
+.tabbar button { transition: color 180ms ease-out; }
+.tabbar button:active:not(:disabled) { transform: none; }
+.tabbar button svg { transition: transform var(--base) var(--ease); }
+.tabbar button:active svg { transform: scale(0.86); }
+.tabbar button.on svg { transform: translateY(-1px); }
+
+/* ---------- sheets ---------- */
+.sheet-backdrop { animation: fade-in var(--base) ease-out backwards; }
+.sheet { animation: sheet-up var(--slow) var(--ease) backwards; will-change: transform; }
+.sheet-backdrop.closing { animation: fade-out 200ms ease-in both; pointer-events: none; }
+.sheet-backdrop.closing .sheet { animation: sheet-down 200ms ease-in both; }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes sheet-up { from { transform: translateY(100%); } }
+@keyframes sheet-down { to { transform: translateY(100%); } }
+
+.check { animation: check-in var(--slow) var(--ease) backwards; }
+@keyframes check-in { from { opacity: 0; transform: translateY(24px); } }
+
+/* ---------- small things ---------- */
+.notice, .empty { animation: page-in var(--base) var(--ease) backwards; }
+.photo img.fade:not(.in) { opacity: 0; }
+.photo img.fade.in { animation: fade-in var(--base) ease-out; }
+.stamp { animation: stamp-in var(--fast) ease-out backwards; }
+@keyframes stamp-in { from { opacity: 0; transform: scale(0.9); } }
+.swipe-card { will-change: transform; }
+.swipe-card.under { transition: transform var(--base) var(--ease), opacity var(--base) ease-out; }
+.card.dim .photo img { transition: opacity 180ms ease-out; }
+
+/* "Why" drawer opens and closes smoothly where the browser can animate to height: auto. */
+@supports (interpolate-size: allow-keywords) {
+  :root { interpolate-size: allow-keywords; }
+  details.steps::details-content { height: 0; overflow: clip; opacity: 0; transition: height var(--base) var(--ease), opacity var(--base) ease-out, content-visibility var(--base) allow-discrete; }
+  details.steps[open]::details-content { height: auto; opacity: 1; }
+}

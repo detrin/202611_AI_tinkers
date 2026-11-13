@@ -4,6 +4,7 @@ import App from './App'
 import { initAnalytics } from './analytics'
 import { getSettings } from './store'
 import './styles.css'
+import './motion.css'
 
 initAnalytics(getSettings().userId)
 
