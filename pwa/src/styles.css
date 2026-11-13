@@ -185,9 +185,13 @@ h3 { font-size: 15px; font-weight: 650; }
 .discover > svg { align-self: center; color: var(--ink-2); }
 .swipe-page { overflow-x: hidden; min-height: 100dvh; }
 .swipe-page .detail-head { align-items: center; }
-.swipe-stack { position: relative; aspect-ratio: 3 / 4; touch-action: pan-y; }
-.swipe-card { position: absolute; inset: 0; aspect-ratio: 3 / 4; border-radius: 24px; overflow: hidden; background: var(--soft); user-select: none; cursor: grab; }
-.swipe-card.skeleton { position: static; }
+/* The deck fits the screen: as wide as the page allows, but never so tall that the like/skip buttons fall below
+   it (260px = back row, title and buttons). The stack never shrinks, and the cards fill it exactly, so a card can
+   no longer be taller than its stack and cover the buttons on wide or short screens. */
+.swipe-page { --deck-w: min(100%, calc((100dvh - var(--tabbar) - 260px - env(safe-area-inset-bottom)) * 3 / 4)); }
+.swipe-stack { position: relative; flex-shrink: 0; width: var(--deck-w); align-self: center; aspect-ratio: 3 / 4; touch-action: pan-y; }
+.swipe-card { position: absolute; inset: 0; border-radius: 24px; overflow: hidden; background: var(--soft); user-select: none; cursor: grab; }
+.swipe-card.skeleton { position: static; flex-shrink: 0; width: var(--deck-w); align-self: center; aspect-ratio: 3 / 4; }
 .swipe-card.under { transform: scale(0.96) translateY(10px); opacity: 0.6; }
 .swipe-card img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
 .swipe-caption { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 16px 16px; display: flex; flex-direction: column; gap: 2px; color: #fff; background: linear-gradient(transparent, rgb(0 0 0 / 0.72)); }
