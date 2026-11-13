@@ -45,11 +45,11 @@ def outfit_mcp(
 
     @server.tool(annotations=READ_ONLY)
     async def get_calendar_events() -> dict[str, Any]:
-        """Read today's timed calendar events. Use title, location, and start time to infer the occasion."""
-        if calendar is None:
-            return {"events": None}
-        events = await anyio.to_thread.run_sync(calendar.events, uid, day, timezone, abandon_on_cancel=True)
-        return {"events": events}
+        """Read timed events for the requested date and time zone, with local start and end timestamps."""
+        events = None
+        if calendar is not None:
+            events = await anyio.to_thread.run_sync(calendar.events, uid, day, timezone, abandon_on_cancel=True)
+        return {"date": day.isoformat(), "timezone": timezone, "events": events}
 
     @server.tool(annotations=READ_ONLY)
     async def get_weather() -> dict[str, Any]:

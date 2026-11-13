@@ -95,7 +95,11 @@ class TodayService:
         except Exception:
             log.warning("Apify venue lookup unavailable")
             category = None
-        steps.append({"tool": "compass/crawler-google-places", "summary": f"Venue type: {category}" if category else "Venue type unavailable"})
+        steps.append({
+            "tool": "compass/crawler-google-places",
+            "summary": f"Venue type: {category}" if category else "Venue type unavailable",
+            "event_start_time": event["start_time"],
+        })
         if category:
             event["place_category"] = category
         if not category and outcome_ids(draft, inputs["wardrobe"]):
@@ -133,7 +137,8 @@ class TodayService:
         weather = weather_for_day(forecast, events)
         commute = tools.get("get_commute", {})
         recent = tools.get("get_recent_outfits", {}).get("item_ids") or []
-        context = {"events": events, "weather": weather, "commute": commute}
+        context = {"date": day.isoformat(), "timezone": self._zone.key,
+                   "events": events, "weather": weather, "commute": commute}
         inputs = context | {"note": note, "wardrobe": wardrobe, "recent_item_ids": recent,
                             "style_profile": user.get("style_profile"), "color_profile": user.get("color_profile")}
         event_summary = events[0]["title"] if events else "casual day"

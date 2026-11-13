@@ -33,18 +33,21 @@ export interface Weather {
 export interface DayEvent {
   title: string
   start_time: string
+  end_time?: string | null
   location: string | null
   place_category?: string | null
+  weather?: Weather | null
 }
 
 export interface Step {
   tool: string
   summary: string
+  event_start_time?: string
 }
 
 export interface Outfit {
   /** Present only when the agent endpoint (/outfits/today) answered. */
-  context?: { events?: DayEvent[]; commute?: { mode?: string | null } }
+  context?: { date?: string; timezone?: string; events?: DayEvent[]; commute?: { mode?: string | null } }
   steps?: Step[]
   from_fallback?: boolean
   id: string

@@ -3,10 +3,11 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
-from backend.app.adapters.calendar import ICalCalendar
+from backend.app.adapters.calendar import DemoCalendar, ICalCalendar
 from backend.app.adapters.executors import InlineExecutor
 from backend.app.container import build_services
 from backend.app.main import create_app
+from backend.app.services.today import weather_for_day
 
 from .conftest import Env
 
@@ -25,6 +26,7 @@ class Weather:
     def hourly(self, city, day, timezone):
         assert (city, day, timezone) == ("Prague", DAY, "Europe/Prague")
         return {"city": city, "hourly": [
+            {"time": "2026-11-13T10:00:00+01:00", "temperature_c": 11, "rain_probability": 0.1},
             {"time": "2026-11-13T12:00:00+01:00", "temperature_c": 14, "rain_probability": 0},
             {"time": "2026-11-13T19:00:00+01:00", "temperature_c": 5, "rain_probability": 0.7},
         ]}
@@ -65,6 +67,43 @@ def test_today_uses_event_hour_and_only_owned_available_items(env):
     assert result["from_fallback"] is False
     assert len(result["steps"]) == 5
     assert len(env.db.select("outfits", {"user_id": uid})) == 1
+
+
+def test_today_demo_calendar_keeps_apify_category_with_the_right_event(env):
+    uid = env.user()["id"]
+    item = env.items(uid, n=1)[0]
+    calendar = DemoCalendar(uid)
+    assert calendar.events("other-user", DAY, "Europe/Prague") is None
+
+    class Venue:
+        async def category(self, location, city):
+            assert (location, city) == ("Café Savoy", "Prague")
+            return "Restaurant"
+
+    env.chat.answers["outfit"] = {"item_ids": [item["id"]], "venue_event_index": 1, "explanation": "Bring a coat."}
+    with today_client(env, calendar=calendar, weather=Weather(), venue=Venue()) as client:
+        response = client.post(f"/users/{uid}/outfits/today", json={"date": DAY.isoformat()}, headers=HEADERS)
+
+    assert response.status_code == 200, response.text
+    result = response.json()
+    context = result["context"]
+    assert (context["date"], context["timezone"]) == (DAY.isoformat(), "Europe/Prague")
+    morning, evening = context["events"]
+    assert (morning["start_time"], morning["weather"]["temperature_c"]) == ("2026-11-13T09:30:00+01:00", 11)
+    assert "place_category" not in morning
+    assert evening["start_time"] == "2026-11-13T18:30:00+01:00"
+    assert (evening["weather"]["temperature_c"], evening["place_category"]) == (5, "Restaurant")
+    assert result["steps"][-1]["event_start_time"] == evening["start_time"]
+
+
+def test_event_late_at_night_uses_midnight_forecast():
+    event = {"start_time": "2026-11-13T23:30:00+01:00"}
+    forecast = {"city": "Prague", "hourly": [
+        {"time": "2026-11-13T23:00:00+01:00", "rain_probability": 0.1},
+        {"time": "2026-11-14T00:00:00+01:00", "rain_probability": 0.8},
+    ]}
+    weather_for_day(forecast, [event])
+    assert event["weather"]["rain_probability"] == 0.8
 
 
 def test_today_falls_back_when_new_picker_and_weather_fail(env, monkeypatch):

@@ -1,15 +1,19 @@
 """Stand-in backend for UI work: Dan's real FastAPI app wired to in-memory fakes, seeded with a small wardrobe.
 
-No Supabase, Featherless or Apify needed. Nothing is saved between restarts.
+No external services needed. Nothing is saved between restarts.
 
     uv run python pwa/dev/fake_api.py        # from the repo root, serves http://localhost:8000
 """
 import io
 import itertools
 import json
+import os
 import re
 import sys
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
@@ -17,10 +21,13 @@ import uvicorn  # noqa: E402
 from fastapi import Response  # noqa: E402
 from PIL import Image, ImageDraw  # noqa: E402
 
+from backend.app.adapters.calendar import DemoCalendar, ICalCalendar  # noqa: E402
 from backend.app.adapters.executors import InlineExecutor  # noqa: E402
 from backend.app.container import build_services  # noqa: E402
 from backend.app.domain import ImageInput  # noqa: E402
 from backend.app.main import create_app  # noqa: E402
+from backend.app.services.stylist import Stylist  # noqa: E402
+from backend.app.services.today import TodayService  # noqa: E402
 from backend.tests import fakes  # noqa: E402
 from backend.tests.fakes_styles import FakeAesthetics, FakeTrends  # noqa: E402
 
@@ -60,7 +67,14 @@ class Chat(fakes.ScriptedChat):
             return json.dumps(self.look_verdict(prompt, images))
         if self.kind(prompt) != "outfit":
             return super().complete(prompt, images)
-        wardrobe = json.loads(re.search(r"Wardrobe: (\[.*\])$", prompt, re.M).group(1))
+        venue_index = None
+        if "venue_event_index" in prompt:
+            context = json.loads(prompt.splitlines()[1])
+            wardrobe = context["wardrobe"]
+            if "You may request one venue lookup" in prompt:
+                venue_index = next((i for i, event in enumerate(context["events"]) if event.get("location")), None)
+        else:
+            wardrobe = json.loads(re.search(r"Wardrobe: (\[.*\])$", prompt, re.M).group(1))
         avoid = set(re.findall(r"[0-9a-f-]{36}", prompt.split("different combination", 1)[1].split("Colour profile")[0])) if "different combination" in prompt else set()
         picked = []
         for cat in ("top", "bottom", "outerwear", "shoes"):
@@ -70,8 +84,8 @@ class Chat(fakes.ScriptedChat):
                 picked.append(pool[0])
         names = ", ".join(w["subtype"] for w in picked)
         return json.dumps({"item_ids": [w["id"] for w in picked],
-                           "explanation": f"Fake stylist picked: {names}. It suits a cool, rainy day. It fits the occasion you entered.",
-                           "missing_item_tip": "a waterproof coat"})
+                           "explanation": f"Demo stylist picked: {names}.",
+                           "missing_item_tip": "a waterproof coat", "venue_event_index": venue_index})
 
 
     @staticmethod
@@ -91,9 +105,24 @@ class Chat(fakes.ScriptedChat):
         }
 
 
-store, chat, db = Store(), Chat(), fakes.InMemoryDatabase()
+class Weather(fakes.FakeWeather):
+    def hourly(self, city, day, timezone):
+        zone = ZoneInfo(timezone)
+        return {"city": city, "hourly": [
+            {"time": datetime(day.year, day.month, day.day, hour, tzinfo=zone).isoformat(),
+             "temperature_c": 8 if hour < 17 else 5, "rain_probability": 0.1 if hour < 17 else 0.8}
+            for hour in range(24)
+        ]}
+
+
+class Venue:
+    async def category(self, location, city):
+        return "Restaurant" if (location, city) == ("Café Savoy", "Prague") else None
+
+
+store, chat, db, weather = Store(), Chat(), fakes.InMemoryDatabase(), Weather()
 services = build_services(db=db, store=store, fetcher=fakes.FakeFetcher(), chat=chat, pins=fakes.FakePins(),
-                          products=fakes.FakeProducts(), social=fakes.FakeSocial(), weather=fakes.FakeWeather(),
+                          products=fakes.FakeProducts(), social=fakes.FakeSocial(), weather=weather,
                           taste_model=fakes.FakeTasteModel(), aesthetics=FakeAesthetics(), trends=FakeTrends(),
                           executor=InlineExecutor())
 user = services.users.create({"name": "Demo (fake data)", "city": "Prague"})
@@ -102,6 +131,13 @@ for subtype, category, colour, rgb, formality, warmth in SEED:
                            "material": "cotton", "fit": "regular", "formality_1to5": formality, "warmth_1to5": warmth}
     services.wardrobe.add(user["id"], [ImageInput(swatch(rgb))])
 
+calendar_url = os.environ.get("CALENDAR_ICS_URL")
+calendar = ICalCalendar(calendar_url, user["id"]) if calendar_url else DemoCalendar(user["id"])
+services = replace(
+    services,
+    today=TodayService(services.users, services.outfits, Stylist(chat), calendar, weather, Venue(), "Europe/Prague"),
+    today_api_token=os.environ.get("TODAY_API_TOKEN"),
+)
 app = create_app(lambda: services)
 
 
@@ -111,7 +147,6 @@ def image(path: str):
 
 
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8000))
     print(f"\n  Fake API on http://localhost:{port}   user id: {user['id']}\n", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

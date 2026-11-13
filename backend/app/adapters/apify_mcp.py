@@ -4,6 +4,7 @@ from mcp.client.streamable_http import streamable_http_client
 
 ACTOR = "compass/crawler-google-places"
 MCP_URL = "https://mcp.apify.com?tools=call-actor,get-dataset-items"
+MAX_RUN_CHARGE_USD = 0.50  # Minimum accepted cap for this pay-per-event Actor.
 
 
 class ApifyVenueLookup:
@@ -25,8 +26,8 @@ class ApifyVenueLookup:
                     run = await session.call_tool("call-actor", {
                         "actor": ACTOR,
                         "input": {"searchStringsArray": [location], "locationQuery": city,
-                                  "maxCrawledPlacesPerSearch": 1},
-                        "callOptions": {"timeout": 20, "maxTotalChargeUsd": 0.05},
+                                  "maxCrawledPlacesPerSearch": 1, "language": "en"},
+                        "callOptions": {"timeout": 30, "maxTotalChargeUsd": MAX_RUN_CHARGE_USD},
                         "waitSecs": 20,
                     })
                     run_data = run.structuredContent or {}

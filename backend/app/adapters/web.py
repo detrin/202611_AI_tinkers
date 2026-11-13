@@ -1,5 +1,5 @@
 """HTTP adapters: image fetching and Open-Meteo weather."""
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import requests
@@ -63,7 +63,9 @@ class OpenMeteoWeather:
         location = hits[0]
         params = {
             "latitude": location["latitude"], "longitude": location["longitude"], "timezone": timezone,
-            "start_date": day.isoformat(), "end_date": day.isoformat(), "hourly": self.HOURLY,
+            "start_hour": f"{day.isoformat()}T00:00",
+            # The midnight sample covers precipitation in the last hour of the requested day.
+            "end_hour": f"{(day + timedelta(days=1)).isoformat()}T00:00", "hourly": self.HOURLY,
             "timeformat": "unixtime",
         }
         response = self._s.get(self.FORECAST, params=params, timeout=5)
