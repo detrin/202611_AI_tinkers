@@ -64,6 +64,30 @@ const DEFAULT_PROFILES: StyleProfile[] = [
 export const getProfiles = (): StyleProfile[] => load('profiles', DEFAULT_PROFILES)
 export const saveProfiles = (p: StyleProfile[]) => save('profiles', p)
 
+/** A plan kept in the app. `day` is 0 for today, 1 for tomorrow. */
+export interface Plan {
+  day: 0 | 1
+  time: string
+  title: string
+  location: string
+}
+
+/** Demo plans stored in the app itself. They are not read from a calendar service. */
+export const PLANS: Plan[] = [
+  { day: 0, time: '19:30', title: 'AI Agents for the Rest of Us: hackathon demos and winners (AI Tinkerers Prague)', location: 'Prague' },
+  { day: 0, time: '21:00', title: 'Dinner with the team after the hackathon', location: 'Restaurant, Prague Old Town' },
+  { day: 1, time: '10:00', title: 'Brunch with friends', location: 'Café, Vinohrady' },
+  { day: 1, time: '14:00', title: 'Client meeting', location: 'Office, Karlín' },
+  { day: 1, time: '19:30', title: 'Dinner date', location: 'Fine dining restaurant, Malá Strana' },
+]
+
+/** The next plan that has not started more than an hour ago; tomorrow's first plan once today is over. */
+export function nextPlan(now = new Date()): Plan | undefined {
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  const mins = (p: Plan) => +p.time.slice(0, 2) * 60 + +p.time.slice(3)
+  return PLANS.find((p) => p.day === 0 && mins(p) + 60 > minutes) ?? PLANS.find((p) => p.day === 1)
+}
+
 export const getOccasion = (): Occasion => load('occasion', { title: 'Casual day', time: '', profile_id: 'weekend' })
 export const saveOccasion = (o: Occasion) => save('occasion', o)
 
@@ -71,7 +95,7 @@ export interface SavedOutfit {
   outfit: Outfit
   selected: boolean
 }
-export const getLastOutfit = (): SavedOutfit | null => load<SavedOutfit | null>('lastOutfit', null)
-export const saveLastOutfit = (o: SavedOutfit | null) => save('lastOutfit', o)
+export const getLastOutfit = (): SavedOutfit | null => load<SavedOutfit | null>('lastOutfit-v3', null)
+export const saveLastOutfit = (o: SavedOutfit | null) => save('lastOutfit-v3', o)
 
 export const today = () => new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD in local time

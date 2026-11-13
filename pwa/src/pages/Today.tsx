@@ -2,7 +2,7 @@ import { Camera, CalendarDays, Check, ChevronRight, CloudSun, Heart, RefreshCw, 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { errorText, eventPrompt, itemName, profileLine, sentences, title, todayNote, weatherLine } from '../format'
-import { getLastOutfit, getOccasion, getProfiles, getSettings, saveLastOutfit, saveOccasion, today } from '../store'
+import { getLastOutfit, getOccasion, getProfiles, getSettings, nextPlan, PLANS, saveLastOutfit, saveOccasion, today } from '../store'
 import type { Item, Occasion, Outfit } from '../types'
 import { ItemSheet, Notice, Photo, Sheet } from '../ui'
 import CheckLook from './Check'
@@ -11,7 +11,14 @@ export default function Today({ active, version }: { active: boolean; version: n
   const saved = useRef(getLastOutfit())
   const [outfit, setOutfit] = useState<Outfit | null>(saved.current?.outfit ?? null)
   const [selected, setSelected] = useState(saved.current?.selected ?? false)
-  const [occasion, setOccasion] = useState<Occasion>(getOccasion)
+  // The next plan is the occasion, until the user sets another one with the sliders.
+  const [occasion, setOccasion] = useState<Occasion>(() => {
+    const plan = nextPlan()
+    const saved = getOccasion()
+    if (!plan) return saved
+    const office = /meeting|client|office/i.test(plan.title)
+    return { title: `${plan.title} (${plan.location})${plan.day ? ', tomorrow' : ''}`, time: plan.time, profile_id: office ? 'office' : saved.profile_id }
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [stale, setStale] = useState(false)
@@ -149,9 +156,20 @@ export default function Today({ active, version }: { active: boolean; version: n
           <>
             <p>
               <CalendarDays size={18} />
-              <span>{occasion.title}{occasion.time && ` · ${occasion.time}`}</span>
-              <em>Entered by you</em>
+              <span>
+                {occasion.time && `${occasion.time} · `}{occasion.title}
+                <small>Dressing for this</small>
+              </span>
             </p>
+            {PLANS.filter((p) => !occasion.title.startsWith(p.title)).slice(0, 3).map((p) => (
+              <p key={`${p.day}-${p.time}`} className="later">
+                <CalendarDays size={18} />
+                <span>
+                  {p.day ? 'Tomorrow ' : ''}{p.time} · {p.title}
+                  <small>{p.location}</small>
+                </span>
+              </p>
+            ))}
             <p>
               <CloudSun size={18} />
               <span>{weather ? `${weather}${outfit?.city ? ` · ${outfit.city}` : ''}` : 'Weather loads with the outfit'}</span>

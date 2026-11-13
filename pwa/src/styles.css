@@ -322,3 +322,6 @@ h3 { font-size: 15px; font-weight: 650; }
 /* the top swipe card must not inherit the page's vertical pan while it is being dragged sideways */
 .swipe-card.top { touch-action: pan-y; z-index: 2; }
 .swipe-card.under { z-index: 1; }
+
+.context p span small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.context p.later { opacity: 0.7; font-size: 14px; }
