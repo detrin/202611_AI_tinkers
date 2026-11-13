@@ -1,5 +1,5 @@
 import { getSettings } from './store'
-import type { Availability, Item, Job, Look, Outfit, Pin, User } from './types'
+import type { Availability, Item, Job, Look, LookVerdict, Outfit, Pin, User } from './types'
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -79,6 +79,19 @@ export const api = {
   /** Agent endpoint: reads calendar, hourly weather, commute and wardrobe through MCP tools. */
   todayOutfit: (note: string) => req<Outfit>(`/users/${uid()}/outfits/today`, json('POST', { note })),
   dailyOutfit: (event: string) => req<Outfit>(`/users/${uid()}/outfits/daily`, json('POST', { event })),
+  /** Photo of the look being worn → "hell yeah" / "hell nah". Weather only when a position or saved city is sent. */
+  checkLook: (photo: File, opts: { position?: GeolocationCoordinates | null; useSavedCity?: boolean; includeWardrobe?: boolean; occasion?: string }) => {
+    const form = new FormData()
+    form.append('file', photo)
+    if (opts.position) {
+      form.append('latitude', String(opts.position.latitude))
+      form.append('longitude', String(opts.position.longitude))
+    }
+    if (opts.useSavedCity) form.append('use_saved_city', 'true')
+    if (opts.includeWardrobe) form.append('include_wardrobe', 'true')
+    if (opts.occasion) form.append('occasion', opts.occasion.slice(0, 300))
+    return req<LookVerdict>(`/users/${uid()}/is-it-good-enough`, { method: 'POST', body: form })
+  },
   outfitFeedback: (id: string, feedback: { worn?: boolean; comment?: string }) =>
     req<Outfit>(`/users/${uid()}/outfits/${id}/feedback`, json('POST', feedback)),
 }

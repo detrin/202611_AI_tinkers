@@ -5,6 +5,7 @@ No Supabase, Featherless or Apify needed. Nothing is saved between restarts.
     uv run python pwa/dev/fake_api.py        # from the repo root, serves http://localhost:8000
 """
 import io
+import itertools
 import json
 import re
 import sys
@@ -21,6 +22,7 @@ from backend.app.container import build_services  # noqa: E402
 from backend.app.domain import ImageInput  # noqa: E402
 from backend.app.main import create_app  # noqa: E402
 from backend.tests import fakes  # noqa: E402
+from backend.tests.fakes_styles import FakeAesthetics, FakeTrends  # noqa: E402
 
 SEED = [  # subtype, category, colour name, rgb, formality, warmth
     ("oxford shirt", "top", "white", (236, 232, 222), 4, 2),
@@ -47,10 +49,15 @@ class Store(fakes.FakeStore):
         return f"/api/_img/{path}"
 
 
+LOOK_TURNS = itertools.cycle([True, False])
+
+
 class Chat(fakes.ScriptedChat):
     """Like the scripted fake, but the outfit is a real pick from the wardrobe in the prompt."""
 
     def complete(self, prompt, images=()):
+        if self.kind(prompt) == "good_enough":
+            return json.dumps(self.look_verdict(prompt, images))
         if self.kind(prompt) != "outfit":
             return super().complete(prompt, images)
         wardrobe = json.loads(re.search(r"Wardrobe: (\[.*\])$", prompt, re.M).group(1))
@@ -67,10 +74,28 @@ class Chat(fakes.ScriptedChat):
                            "missing_item_tip": "a waterproof coat"})
 
 
+    @staticmethod
+    def look_verdict(prompt, images):
+        """Alternates hell yeah / hell nah on each check, so both can be seen."""
+        good = next(LOOK_TURNS)
+        has_weather = '"weather": null' not in prompt
+        ids = re.findall(r'"id": "([0-9a-f-]{36})"', prompt)[:2]
+        return {
+            "good_enough": good, "score_1to10": 8 if good else 4,
+            "explanation": "Clean lines and the colours sit well together. The proportions work for a day out."
+            if good else "The top fights the trousers and the silhouette looks boxy. It reads more errand than occasion.",
+            "highlights": ["Trouser length is right", "Neutral palette"] if good else ["Shoes are a good choice"],
+            "fixes": [] if good else ["Tuck the top in at the front", "Swap to a darker trouser"],
+            "weather_note": ("Warm enough for 6°C, take a layer for the evening" if has_weather else ""),
+            "swap_item_ids": [] if good else ids,
+        }
+
+
 store, chat, db = Store(), Chat(), fakes.InMemoryDatabase()
 services = build_services(db=db, store=store, fetcher=fakes.FakeFetcher(), chat=chat, pins=fakes.FakePins(),
                           products=fakes.FakeProducts(), social=fakes.FakeSocial(), weather=fakes.FakeWeather(),
-                          taste_model=fakes.FakeTasteModel(), executor=InlineExecutor())
+                          taste_model=fakes.FakeTasteModel(), aesthetics=FakeAesthetics(), trends=FakeTrends(),
+                          executor=InlineExecutor())
 user = services.users.create({"name": "Demo (fake data)", "city": "Prague"})
 for subtype, category, colour, rgb, formality, warmth in SEED:
     chat.answers["tag"] = {"category": category, "subtype": subtype, "colors": [colour], "pattern": "solid",
@@ -86,5 +111,7 @@ def image(path: str):
 
 
 if __name__ == "__main__":
-    print(f"\n  Fake API on http://localhost:8000   user id: {user['id']}\n", flush=True)
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    import os
+    port = int(os.environ.get("PORT", 8000))
+    print(f"\n  Fake API on http://localhost:{port}   user id: {user['id']}\n", flush=True)
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

@@ -1,10 +1,11 @@
-import { CalendarDays, Check, CloudSun, Heart, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import { Camera, CalendarDays, Check, ChevronRight, CloudSun, Heart, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { errorText, eventPrompt, itemName, profileLine, sentences, title, todayNote, weatherLine } from '../format'
 import { getLastOutfit, getOccasion, getProfiles, getSettings, saveLastOutfit, saveOccasion, today } from '../store'
 import type { Item, Occasion, Outfit } from '../types'
 import { ItemSheet, Notice, Sheet } from '../ui'
+import CheckLook from './Check'
 
 export default function Today({ active, version }: { active: boolean; version: number }) {
   const saved = useRef(getLastOutfit())
@@ -16,6 +17,7 @@ export default function Today({ active, version }: { active: boolean; version: n
   const [stale, setStale] = useState(false)
   const [controls, setControls] = useState(false)
   const [openItem, setOpenItem] = useState<Item | null>(null)
+  const [checking, setChecking] = useState(false)
   const started = useRef(false)
 
   const profiles = getProfiles()
@@ -101,6 +103,19 @@ export default function Today({ active, version }: { active: boolean; version: n
           <SlidersHorizontal size={22} />
         </button>
       </header>
+
+      {getSettings().userId && (
+        <button className="check-entry" onClick={() => setChecking(true)}>
+          <span className="check-entry-icon">
+            <Camera size={22} />
+          </span>
+          <span>
+            <strong>Already dressed?</strong>
+            <small>Snap a photo: hell yeah or hell nah</small>
+          </span>
+          <ChevronRight size={20} />
+        </button>
+      )}
 
       <section className="context" onClick={() => setControls(true)}>
         <p>
@@ -220,6 +235,8 @@ export default function Today({ active, version }: { active: boolean; version: n
           }
         />
       )}
+
+      {checking && <CheckLook occasion={occasion.time ? `${occasion.title} at ${occasion.time}` : occasion.title} onClose={() => setChecking(false)} />}
 
       {controls && <Controls occasion={occasion} onApply={applyControls} onClose={() => setControls(false)} />}
     </div>

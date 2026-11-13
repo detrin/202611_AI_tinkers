@@ -42,6 +42,7 @@ Open the tunnel address on the phone, then Chrome menu → "Add to Home screen" 
 | Occasion (event and time) | Typed by the user, and labelled so. Switch to the calendar when `POST /users/{uid}/outfits/today` exists |
 | Style profiles (Office, Weekend, ...) | Stored on the phone. The backend has no table for them. Their tags, colours, fit and formality are sent inside the `event` text of `POST /outfits/daily`, which is how the selected profile affects the outfit |
 | Pinterest board | Saved as a link only, and labelled so |
+| "Is it good enough?" (Today → Already dressed?) | Live: `POST /users/{uid}/is-it-good-enough`. Weather from the phone's position, else the saved city. Closet swaps only when switched on |
 
 "Try another" and "in the laundry" also work through the `event` text: it asks for available items only and for a different combination. The backend does not enforce availability itself yet.
 

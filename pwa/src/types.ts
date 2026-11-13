@@ -120,3 +120,23 @@ export interface Occasion {
   time: string
   profile_id: string | null
 }
+
+/** Answer of POST /users/{uid}/is-it-good-enough. */
+export interface LookVerdict {
+  verdict: 'hell yeah' | 'hell nah'
+  good_enough: boolean
+  score_1to10: number | null
+  explanation: string
+  highlights: string[]
+  fixes: string[]
+  weather_note: string | null
+  swap_item_ids: string[]
+  /** Only when a location was sent. */
+  weather: {
+    city?: string
+    current?: { temperature_2m?: number; apparent_temperature?: number; precipitation?: number; wind_speed_10m?: number }
+    today?: { temperature_2m_max?: number; temperature_2m_min?: number; precipitation_probability_max?: number }
+  } | null
+  location_source: 'coordinates' | 'city' | null
+  used_wardrobe: boolean
+}
