@@ -94,6 +94,7 @@ export interface User {
   id: string
   name: string
   city: string | null
+  fit_prefs?: { audience?: string } | null
   style_profile?: { summary?: string; style_tags?: string[]; preferred_colors?: string[] } | null
 }
 

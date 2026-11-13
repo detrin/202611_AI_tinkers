@@ -278,10 +278,12 @@ function OutfitBoard({ items, onOpen, onSwipe }: { items: Item[]; onOpen: (i: It
   const [dx, setDx] = useState(0)
   const start = useRef<number | null>(null)
   const dragged = useRef(false)
+  const [dragging, setDragging] = useState(false)
   const lean = Math.max(-1, Math.min(1, dx / 90))
   const end = () => {
     if (start.current === null) return
     start.current = null
+    setDragging(false)
     if (Math.abs(dx) > 90) onSwipe(dx > 0)
     setDx(0)
   }
@@ -290,10 +292,11 @@ function OutfitBoard({ items, onOpen, onSwipe }: { items: Item[]; onOpen: (i: It
     <div className="outfit">
       <div
         className="outfit-cards"
-        style={{ transform: `translateX(${dx}px) rotate(${lean * 4}deg)`, transition: start.current === null ? 'transform 180ms ease-out' : 'none' }}
+        style={{ transform: `translateX(${dx}px) rotate(${lean * 4}deg)`, transition: dragging ? 'none' : 'transform 180ms ease-out' }}
         onPointerDown={(e) => {
           start.current = e.clientX
           dragged.current = false
+          setDragging(true)
         }}
         onPointerMove={(e) => {
           if (start.current === null) return

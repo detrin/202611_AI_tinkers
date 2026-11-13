@@ -5,7 +5,23 @@ import { errorText } from '../format'
 import type { Pin } from '../types'
 import { Notice } from '../ui'
 
-const BATCH = 8
+const BATCH = 24
+const WANTED = 6
+
+const MEN = /\b(men|mens|men's|man|male|guys?|menswear|masculine|him|his|boyfriend|gentlem[ae]n)\b/i
+const WOMEN = /\b(women|womens|women's|woman|female|girls?|ladies|lady|womenswear|feminine|she|her|skirts?|dress(es)?|heels|blouse|mary janes?)\b/i
+
+/**
+ * The deck comes from Pinterest searches per style, and the backend only filters whole styles by audience, so a
+ * unisex style such as Minimalism still brings looks for the other audience. Keep only pins whose title says they
+ * are for this user's audience. Pins with no telling title are dropped: better fewer looks than wrong ones.
+ */
+function fitsAudience(pin: Pin, audience: string | undefined): boolean {
+  const text = `${pin.title || ''}`
+  if (audience === 'menswear') return MEN.test(text) && !WOMEN.test(text)
+  if (audience === 'womenswear') return WOMEN.test(text) && !MEN.test(text)
+  return true
+}
 const THRESHOLD = 90
 
 /** Swipe looks left or right. Each answer teaches the backend which styles the user likes. */
@@ -17,16 +33,29 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
   const [count, setCount] = useState({ liked: 0, total: 0 })
   const [dx, setDx] = useState(0)
   const [leaving, setLeaving] = useState<0 | 1 | -1>(0)
+  const [dragging, setDragging] = useState(false)
   const startX = useRef<number | null>(null)
   const fetching = useRef(false)
+  const audience = useRef<string | null | undefined>(null)
 
   const refill = useCallback(async () => {
     if (fetching.current) return
     fetching.current = true
     try {
-      const more = await api.swipeDeck(BATCH)
-      if (more.length === 0) setDone(true)
-      setDeck((d) => [...d, ...more.filter((m) => !d.some((x) => x.id === m.id))])
+      if (audience.current === null) {
+        audience.current = await api.user().then((u) => u.fit_prefs?.audience, () => undefined)
+      }
+      const fresh: Pin[] = []
+      // Ask for a few batches at most: many pins are filtered out, and each one served is marked as seen.
+      for (let round = 0; round < 3 && fresh.length < WANTED; round++) {
+        const more = await api.swipeDeck(BATCH)
+        if (more.length === 0) {
+          setDone(true)
+          break
+        }
+        fresh.push(...more.filter((m) => fitsAudience(m, audience.current ?? undefined)))
+      }
+      setDeck((d) => [...d, ...fresh.filter((m) => !d.some((x) => x.id === m.id))])
       setError('')
     } catch (e) {
       setError(errorText(e))
@@ -55,7 +84,7 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
       })
       setLeaving(0)
       setDx(0)
-    }, 180)
+    }, 220)
   }
 
   const offset = leaving ? leaving * 420 : dx
@@ -81,28 +110,36 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
         <>
           <div className="swipe-stack">
             {deck[1] && (
-              <div className="swipe-card under">
+              <div className="swipe-card under" key={`under-${deck[1].id}`}>
                 <img src={deck[1].image_url} alt="" />
               </div>
             )}
+            {/* Keyed by pin: the next card mounts fresh in the centre instead of sliding back from where the last one left. */}
             <div
-              className="swipe-card"
+              key={pin.id}
+              className="swipe-card top"
               style={{
                 transform: `translateX(${offset}px) rotate(${lean * 6}deg)`,
-                transition: startX.current === null ? 'transform 180ms ease-out' : 'none',
+                opacity: leaving ? 0 : 1,
+                transition: dragging ? 'none' : 'transform 220ms ease-out, opacity 220ms ease-out',
               }}
               onPointerDown={(e) => {
+                if (leaving) return
                 startX.current = e.clientX
+                setDragging(true)
                 e.currentTarget.setPointerCapture(e.pointerId)
               }}
               onPointerMove={(e) => startX.current !== null && setDx(e.clientX - startX.current)}
               onPointerUp={() => {
+                if (startX.current === null) return
                 startX.current = null
+                setDragging(false)
                 if (Math.abs(dx) > THRESHOLD) answer(dx > 0)
                 else setDx(0)
               }}
               onPointerCancel={() => {
                 startX.current = null
+                setDragging(false)
                 setDx(0)
               }}
             >
