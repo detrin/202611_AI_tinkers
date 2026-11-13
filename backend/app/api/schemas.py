@@ -39,6 +39,7 @@ class ItemPatch(Patch):
     pattern: str | None = None
     material: str | None = None
     fit: str | None = None
+    description: str | None = Field(None, max_length=1000)
     formality: int | None = Field(None, ge=1, le=5)
     warmth: int | None = Field(None, ge=1, le=5)
     style_tags: list[str] | None = None

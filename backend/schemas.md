@@ -125,11 +125,11 @@ Job endpoints:
 | POST | `/users/{uid}/wardrobe` | multipart: repeated `files` and/or repeated form `image_urls`, form `status=owned\|wanted` (default owned) | list of tagged items with signed `image_url` |
 | GET | `/users/{uid}/wardrobe` | `?status=owned\|wanted\|all` (default owned) `&category=&color=` | items with signed `image_url` |
 | GET | `/users/{uid}/wardrobe/{item_id}` | | item |
-| PATCH | `/users/{uid}/wardrobe/{item_id}` | `{status?, category?, subtype?, colors?, pattern?, material?, fit?, formality?, warmth?, style_tags?, availability?}` (`availability`: available\|laundry\|lent\|stored) | item (to fix wrong tags) |
+| PATCH | `/users/{uid}/wardrobe/{item_id}` | `{status?, category?, subtype?, colors?, pattern?, material?, fit?, description?, formality?, warmth?, style_tags?, availability?}` (`availability`: available\|laundry\|lent\|stored) | item (to fix wrong tags) |
 | POST | `/users/{uid}/wardrobe/{item_id}/buy` | | item with `status=owned` (no re-upload or re-tagging) |
 | DELETE | `/users/{uid}/wardrobe/{item_id}` | | `{deleted}` |
 
-Items also carry `fit`, `availability` and `source_type` (upload\|product_url\|instagram\|pin) + `source_url`.
+Items also carry `fit`, `availability` and `source_type` (upload\|product_url\|instagram\|pin) + `source_url`. Every item also gets a free-text `description` (1-2 sentences of visual detail from the vision model). It is included in every text prompt, including the Opus taste profile, which never sees images.
 
 ### Imports from a URL (retailer page or Instagram)
 | Method | Path | Body | Returns |

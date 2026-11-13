@@ -91,7 +91,8 @@ class ScriptedChat:
         self.calls: list[tuple[str, str, list]] = []
         self.answers = {
             "tag": {"category": "top", "subtype": "t-shirt", "colors": ["white"], "pattern": "solid",
-                    "material": "cotton", "formality_1to5": 2, "warmth_1to5": 1, "style_tags": ["casual"]},
+                    "material": "cotton", "formality_1to5": 2, "warmth_1to5": 1, "style_tags": ["casual"],
+                    "description": "Boxy white crew-neck tee in heavy cotton jersey, dropped shoulders."},
             "look": {"style_tags": ["old money"], "palette": ["camel", "navy"], "formality_1to5": 4, "vibe": "polished",
                      "pieces": [{"category": "outerwear", "subtype": "camel coat", "colors": ["camel"]}]},
             "color": {"season": "Soft Autumn", "best_colors": ["olive"], "avoid_colors": ["neon"]},

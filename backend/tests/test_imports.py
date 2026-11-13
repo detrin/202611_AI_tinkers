@@ -144,3 +144,19 @@ def test_import_endpoint_validates_eagerly(client):
     assert client.post(f"/users/{uid}/imports", json={"url": "??"}).status_code == 422
     assert client.post("/users/nope/imports", json={"url": "@jane"}).status_code == 404
     assert client.post(f"/users/{uid}/imports", json={"url": "@jane", "max_posts": 99}).status_code == 422
+
+
+# ---------- free-text description ----------
+def test_item_description_is_stored_and_reaches_text_only_prompts(env):
+    uid = env.user()["id"]
+    item = env.items(uid, 1)[0]
+    assert item["description"].startswith("Boxy white crew-neck")
+    assert "description" in next(p for kind, p, _ in env.chat.calls if kind == "tag")
+    assert env.c.taste.evidence(uid)["owned_items"][0]["description"] == item["description"]   # what Opus sees
+
+
+def test_instagram_items_keep_their_description(env):
+    uid = env.user()["id"]
+    env.chat.answers["post"] = {"has_outfit": True, "items": [{"category": "top", "description": "Navy oxford"}]}
+    items = env.c.imports.instagram(uid, "https://www.instagram.com/p/X/", 1, import_items=True)["items_added"]
+    assert items[0]["description"] == "Navy oxford"

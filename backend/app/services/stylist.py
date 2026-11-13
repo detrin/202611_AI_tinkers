@@ -6,7 +6,9 @@ from collections.abc import Sequence
 from ..ports import ChatModel
 
 ITEM_SCHEMA = """{"category":"top|bottom|outerwear|shoes|dress|accessory","subtype":"","colors":["primary first"],
- "pattern":"","material":"","fit":"slim|regular|relaxed|oversized","formality_1to5":0,"warmth_1to5":0,"style_tags":[]}"""
+ "pattern":"","material":"","fit":"slim|regular|relaxed|oversized","formality_1to5":0,"warmth_1to5":0,"style_tags":[],
+ "description":"1-2 sentences a stylist could picture without the photo: cut, silhouette, details (collar, buttons,
+ hems, texture, finish, logos), how it drapes; no guessing brand or price"}"""
 
 TAG = "Identify the single main clothing item, shoe or accessory in this photo. Return ONLY JSON:\n" + ITEM_SCHEMA
 

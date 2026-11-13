@@ -12,7 +12,7 @@ from .users import UserService
 OWNED, WANTED = "owned", "wanted"
 STATUSES = (OWNED, WANTED)
 SUMMARY_FIELDS = ("id", "category", "subtype", "colors", "pattern", "material", "fit", "formality", "warmth",
-                  "style_tags", "availability")
+                  "style_tags", "availability", "description")  # description = the only visual detail text-only models see
 UPLOAD: Row = {"source_type": "upload"}
 PRODUCT_CONTEXT = ("name", "description", "price", "currency", "marketplace")
 PRODUCT_RAW_CONTEXT = ("brand", "material", "color", "category")  # small, useful bits of the scraped payload
@@ -25,7 +25,7 @@ def item_row(uid: str, image_id: str, tags: dict, status: str = OWNED, product_i
             "category": tags.get("category"), "subtype": tags.get("subtype"), "colors": tags.get("colors") or [],
             "pattern": tags.get("pattern"), "material": tags.get("material"), "fit": tags.get("fit"),
             "formality": tags.get("formality_1to5"), "warmth": tags.get("warmth_1to5"),
-            "style_tags": tags.get("style_tags") or [], "raw": tags, **source}
+            "style_tags": tags.get("style_tags") or [], "description": tags.get("description"), "raw": tags, **source}
 
 
 def summarise(items: list[Row]) -> list[Row]:
