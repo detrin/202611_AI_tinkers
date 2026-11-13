@@ -1,3 +1,4 @@
+import { identify } from './analytics'
 import type { Occasion, Outfit, StyleProfile } from './types'
 
 function load<T>(key: string, fallback: T): T {
@@ -24,7 +25,10 @@ export interface Settings {
 
 export const getSettings = (): Settings =>
   load('settings', { apiBase: '/api', userId: (import.meta.env.VITE_USER_ID as string | undefined) || '' })
-export const saveSettings = (s: Settings) => save('settings', s)
+export const saveSettings = (s: Settings) => {
+  save('settings', s)
+  identify(s.userId)
+}
 
 const profile = (
   id: string,
