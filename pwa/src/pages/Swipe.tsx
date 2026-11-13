@@ -28,7 +28,7 @@ const THRESHOLD = 90
 export default function Swipe({ onBack }: { onBack: () => void }) {
   const [deck, setDeck] = useState<Pin[]>([])
   const [loading, setLoading] = useState(true)
-  const [done, setDone] = useState(false)
+  const [done] = useState(false)
   const [error, setError] = useState('')
   const [count, setCount] = useState({ liked: 0, total: 0 })
   const [dx, setDx] = useState(0)
@@ -37,6 +37,9 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
   const startX = useRef<number | null>(null)
   const fetching = useRef(false)
   const audience = useRef<string | null | undefined>(null)
+  // Every look shown so far. When the server has nothing new, these come round again, so the deck never ends.
+  const pool = useRef<Pin[]>([])
+  const spare = useRef<Pin[]>([])
 
   const refill = useCallback(async () => {
     if (fetching.current) return
@@ -49,13 +52,18 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
       // Ask for a few batches at most: many pins are filtered out, and each one served is marked as seen.
       for (let round = 0; round < 3 && fresh.length < WANTED; round++) {
         const more = await api.swipeDeck(BATCH)
-        if (more.length === 0) {
-          setDone(true)
-          break
-        }
+        if (more.length === 0) break
         fresh.push(...more.filter((m) => fitsAudience(m, audience.current ?? undefined)))
+        spare.current.push(...more.filter((m) => !fitsAudience(m, audience.current ?? undefined)))
       }
-      setDeck((d) => [...d, ...fresh.filter((m) => !d.some((x) => x.id === m.id))])
+      pool.current.push(...fresh.filter((m) => !pool.current.some((x) => x.id === m.id)))
+      setDeck((d) => {
+        const add = fresh.filter((m) => !d.some((x) => x.id === m.id))
+        if (add.length) return [...d, ...add]
+        // Nothing new: go round again through what was already shown (or, failing that, the unfiltered looks).
+        const again = (pool.current.length ? pool.current : spare.current).filter((m) => !d.some((x) => x.id === m.id))
+        return [...d, ...again.sort(() => Math.random() - 0.5)]
+      })
       setError('')
     } catch (e) {
       setError(errorText(e))
@@ -79,7 +87,7 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
     setTimeout(() => {
       setDeck((d) => {
         const rest = d.slice(1)
-        if (rest.length <= 2 && !done) refill()
+        if (rest.length <= 2) refill()
         return rest
       })
       setLeaving(0)
