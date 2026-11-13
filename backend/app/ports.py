@@ -48,5 +48,12 @@ class WeatherProvider(Protocol):
     def daily(self, city: str, day: date | None = None) -> dict: ...
 
 
+class StructuredModel(Protocol):
+    """A strong reasoning model that returns JSON matching `schema` (e.g. Claude Opus via the CLI)."""
+    model: str
+
+    def generate(self, prompt: str, schema: dict) -> dict: ...
+
+
 class Executor(Protocol):
     def submit(self, fn: Callable[[], None]) -> None: ...

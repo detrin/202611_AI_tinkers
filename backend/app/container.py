@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 
 from .config import Settings
-from .ports import ChatModel, Database, Executor, ImageFetcher, ImageStore, PinSource, ProductSource, SocialSource, WeatherProvider
+from .ports import ChatModel, Database, Executor, ImageFetcher, ImageStore, PinSource, ProductSource, SocialSource, StructuredModel, WeatherProvider
 from .services.catalog import CatalogService
 from .services.feedback import ProductFeedbackService
 from .services.images import ImageService
@@ -15,6 +15,7 @@ from .services.preferences import PreferenceService
 from .services.profiles import ProfileService
 from .services.recommendations import RecommendationService
 from .services.styles import StyleService
+from .services.taste import TasteService
 from .services.stylist import Stylist
 from .services.users import UserService
 from .services.wardrobe import WardrobeService
@@ -34,13 +35,14 @@ class Container:
     imports: ImportService
     links: LinkService
     outfits: OutfitService
+    taste: TasteService
     jobs: JobService
     weather: WeatherProvider
 
 
 def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, chat: ChatModel, pins: PinSource,
                    products: ProductSource, social: SocialSource, weather: WeatherProvider,
-                   executor: Executor) -> Container:
+                   taste_model: StructuredModel, executor: Executor) -> Container:
     stylist = Stylist(chat)
     images = ImageService(db, store, fetcher)
     users = UserService(db, images, stylist)
@@ -58,6 +60,7 @@ def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, ch
         imports=ImportService(db, users, images, wardrobe, catalog, social, stylist),
         links=LinkService(db, users, catalog, profiles, wardrobe, stylist),
         outfits=OutfitService(db, users, wardrobe, images, weather, stylist),
+        taste=TasteService(db, users, wardrobe, inspirations, prefs, styles, taste_model),
         jobs=JobService(db, executor), weather=weather,
     )
 
@@ -67,6 +70,7 @@ def build_container(settings: Settings | None = None) -> Container:
     from supabase import create_client
 
     from .adapters.apify import ApifyInstagramSource, ApifyPinSource, ApifyProductSource, ApifyRunner
+    from .adapters.claude_cli import ClaudeCLI
     from .adapters.executors import ThreadExecutor
     from .adapters.featherless import FeatherlessChat
     from .adapters.html import FallbackProductSource, HtmlProductSource
@@ -80,6 +84,6 @@ def build_container(settings: Settings | None = None) -> Container:
         db=SupabaseDatabase(client), store=SupabaseImageStore(client, s.bucket, s.signed_url_ttl),
         fetcher=HttpImageFetcher(), chat=FeatherlessChat.create(s.featherless_key, s.vision_model, s.text_model),
         pins=ApifyPinSource(runner), products=FallbackProductSource(HtmlProductSource(), ApifyProductSource(runner)),
-        social=ApifyInstagramSource(runner), weather=OpenMeteoWeather(),
+        social=ApifyInstagramSource(runner), weather=OpenMeteoWeather(), taste_model=ClaudeCLI(s.taste_model),
         executor=ThreadExecutor(s.job_workers),
     )

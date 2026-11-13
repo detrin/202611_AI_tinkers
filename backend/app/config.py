@@ -24,6 +24,7 @@ class Settings:
     apify_token: str
     vision_model: str = "Qwen/Qwen3-VL-30B-A3B-Instruct"  # GLM-5.3-Flash ignores images on Featherless
     text_model: str = "zai-org/GLM-5.3-Flash"
+    taste_model: str = "claude-opus-5-5"  # via `claude -p`
     bucket: str = "images"
     signed_url_ttl: int = 3600
     job_workers: int = 4
@@ -37,4 +38,5 @@ class Settings:
             apify_token=secret("APIFY_TOKEN"),
             vision_model=os.environ.get("VISION_MODEL", cls.vision_model),
             text_model=os.environ.get("TEXT_MODEL", cls.text_model),
+            taste_model=os.environ.get("TASTE_MODEL", cls.taste_model),
         )

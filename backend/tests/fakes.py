@@ -160,3 +160,28 @@ class FakeSocial:
         self.urls.append(url)
         return [SocialPost(url=f"https://ig/p/{i}", image_urls=(f"https://igcdn/{i}.jpg",), caption=f"look {i}")
                 for i in range(min(self.n, limit))]
+
+
+class FakeTasteModel:
+    """StructuredModel fake: records prompts, returns a canned profile."""
+
+    model = "fake-opus"
+
+    def __init__(self):
+        self.prompts: list[str] = []
+        self.schemas: list[dict] = []
+        self.answer = {
+            "headline": "Clean smart-casual drifting towards old money",
+            "current_style": {"summary": "basics", "style_mix": [{"style": "smart casual", "percent": 100, "evidence": "chinos"}],
+                              "palette": ["navy"], "silhouettes": ["regular"], "formality_range": [2, 3]},
+            "aspirational_style": {"summary": "polished", "style_mix": [{"style": "old money", "percent": 100, "evidence": "camel coat"}],
+                                   "palette": ["camel"], "silhouettes": ["tailored"], "formality_range": [3, 4]},
+            "gap": {"summary": "more tailoring", "moves": [{"action": "add a camel coat", "why": "matches inspo"}]},
+            "colors": {"wear_more": ["camel"], "avoid": ["neon"]}, "avoid": ["logos"],
+            "shop_queries": ["camel wool coat"], "confidence": 0.6, "missing_evidence": ["outfit feedback"],
+        }
+
+    def generate(self, prompt, schema):
+        self.prompts.append(prompt)
+        self.schemas.append(schema)
+        return self.answer

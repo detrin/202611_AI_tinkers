@@ -1,0 +1,93 @@
+# Wardrobe stylist (AI Tinkers hackathon, Nov 2026)
+
+Upload photos of what you own, what you want and looks you love. The app works out your taste, then:
+- suggests what to wear today (weather + event, owned items only)
+- suggests what to buy next (real shop links that fill the gap between how you dress and how you want to dress)
+
+| Part | Where |
+|---|---|
+| REST API (FastAPI, ports & adapters) | `backend/app/`, spec: [`backend/schemas.md`](backend/schemas.md) |
+| Database + image storage | Supabase project `wardrobe-stylist`, migrations in `supabase/migrations/` |
+| Vision tagging, cheap reasoning | Featherless (`Qwen3-VL-30B` for images, `GLM-5.3-Flash` for text) |
+| Taste profile | Claude Opus 5.5 via `claude -p` |
+| Scraping (Pinterest, shops, Instagram) | Apify |
+| End-to-end PoC notebook | `examples/` |
+
+## Run the backend
+
+```bash
+uv sync
+uv run uvicorn backend.app.main:app --reload --port 8000   # Swagger UI: http://localhost:8000/docs
+uv run pytest                                               # unit tests, no network
+```
+
+Secrets are read from env vars first, then the macOS Keychain:
+- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `FEATHERLESS_API_KEY`, `APIFY_TOKEN`
+- the taste profile also needs the `claude` CLI, installed and logged in
+
+## Test user (for UI work and manual testing)
+
+A seeded user with a real, already-tagged wardrobe lives in the shared Supabase project:
+
+| | |
+|---|---|
+| `user_id` | `{{UID}}` |
+| name | Test User (seed), Prague, budget 200 EUR, sizes M / 43 |
+| owned items (8) | chinos, oxford shirt, white sneakers, denim jacket, black Chelsea boots, green Aran sweater, Breton striped top, high-waisted jeans |
+| wanted (2) | penny loafers, cashmere scarf |
+| inspiration looks (4) | London Fashion Week street style ×3, Pitti Uomo |
+| taste profile | built with Claude Opus 5.5 |
+
+The ID is also saved in `backend/scripts/test_user.json`. All photos are from Wikimedia Commons.
+
+To make a fresh one (new user every run, about 3–5 min; Wikimedia rate-limits downloads):
+```bash
+uv run python -m backend.scripts.seed_test_user           # wardrobe, wishlist and inspirations
+uv run python -m backend.scripts.seed_test_user --taste   # ...and build the taste profile with Opus
+```
+
+### Calling the API as the test user
+
+```bash
+API=http://localhost:8000
+UID={{UID}}
+
+curl $API/users/$UID                                   # profile basics
+curl "$API/users/$UID/wardrobe"                        # owned items (signed image_url valid 1 h)
+curl "$API/users/$UID/wardrobe?status=wanted"          # wishlist   (status=all for both)
+curl $API/users/$UID/inspirations                      # saved looks
+curl $API/users/$UID/taste-profile                     # latest Opus taste profile
+curl $API/users/$UID/taste-profile/evidence            # what the model sees (no LLM call)
+
+# daily outfit for the user's city (Prague), owned items only
+curl -X POST $API/users/$UID/outfits/daily -H 'Content-Type: application/json' -d '{"event":"office day"}'
+
+# add an item by photo URL (or multipart files=@photo.jpg); status=wanted for wishlist
+curl -X POST $API/users/$UID/wardrobe -F image_urls=https://example.com/coat.jpg -F status=owned
+
+# rebuild the taste profile (async job), then poll it
+JOB=$(curl -s -X POST $API/users/$UID/taste-profile | python3 -c 'import json,sys;print(json.load(sys.stdin)["job_id"])')
+curl $API/jobs/$JOB                                    # status: queued → running → done
+```
+
+From Python or a notebook:
+```python
+import requests, time, json, pathlib
+API = "http://localhost:8000"
+UID = json.loads(pathlib.Path("backend/scripts/test_user.json").read_text())["user_id"]
+
+wardrobe = requests.get(f"{API}/users/{UID}/wardrobe").json()
+taste = requests.get(f"{API}/users/{UID}/taste-profile").json()["profile"]
+print(taste["headline"], taste["current_style"]["style_mix"], taste["aspirational_style"]["style_mix"])
+
+def wait(job):
+    while (j := requests.get(f"{API}/jobs/{job['job_id']}").json())["status"] in ("queued", "running"):
+        time.sleep(3)
+    return j
+
+wait(requests.post(f"{API}/users/{UID}/taste-profile").json())
+```
+
+**Please don't delete the test user's items.** Other people use this user for UI testing. To experiment with destructive calls, create your own user with `POST /users`, or run the seed script.
+
+Response shapes for every endpoint are in [`backend/schemas.md`](backend/schemas.md) and in Swagger at `/docs`.

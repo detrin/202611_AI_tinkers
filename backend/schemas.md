@@ -90,6 +90,7 @@ uv run pytest          # 60 unit tests, ~0.5 s, all fakes (tests/fakes.py)
 | `product_feedback` | (user_id, product_id) PK, liked, bought | `liked` creates a wanted item; `bought` flips it to owned |
 | `link_checks` | id, user_id, product_id, url, score 1-10, verdict jsonb | links the user pasted |
 | `outfits` | id, user_id, date, event, city, weather jsonb, item_ids uuid[], explanation, missing_item_tip, feedback jsonb | daily outfits |
+| `taste_profiles` | id, user_id, model, profile jsonb, facts jsonb, evidence_counts jsonb | Opus-built taste profile; append-only, latest row wins |
 | `jobs` | id, kind, user_id, status (queued/running/done/failed), input, result, error | async work |
 
 ## Async jobs
@@ -184,6 +185,34 @@ How each feature uses them:
 | POST | `/users/{uid}/links` | `{url}` | **job**: scrape the product page, then a verdict `{score_1to10, pairs_with[], verdict, redundant_with[]}` |
 | GET | `/users/{uid}/links` | | history with product info |
 
+### Taste profile (Claude Opus via `claude -p`)
+| Method | Path | Returns |
+|---|---|---|
+| POST | `/users/{uid}/taste-profile` | **job** (about 10–60 s). Gathers all evidence and sends it to Opus with a JSON schema. 409 if there are fewer than 3 pieces of evidence |
+| GET | `/users/{uid}/taste-profile` | latest `{model, profile, facts, evidence_counts}` (404 if none) |
+| GET | `/users/{uid}/taste-profile/evidence` | exactly what would be sent to the model, plus `counts` (cheap, no LLM) |
+
+**Evidence pack:**
+- `wardrobe_facts`: deterministic statistics over owned items, such as top categories, primary colours, materials, fits, style tags and a formality histogram
+- owned items, wishlist, inspiration looks, liked/disliked swipes, liked products, rated outfits
+- the Instagram style profile and the colour profile
+
+The prompt weights the sources:
+- **High:** outfit feedback, Instagram, inspirations
+- **Medium:** owned items, wishlist, liked products
+- **Low:** swipes
+
+It also keeps **current** style (what they own and wear) apart from **aspirational** style (what they save and like).
+
+`profile` fields:
+- `headline`
+- `current_style` / `aspirational_style`: `{summary, style_mix[{style, percent, evidence}], palette, silhouettes, key_pieces, formality_range}`
+- `gap {summary, moves[{action, why}]}`
+- `colors {wear_more, avoid}`
+- `avoid`, `shop_queries`, `confidence` (0–1), `missing_evidence`
+
+**Runtime:** the `claude` CLI must be installed and logged in on the backend host. `ANTHROPIC_API_KEY` is removed from the child process environment so your Claude login is used. Override the model with `TASTE_MODEL` (default `claude-opus-5-5`).
+
 ### Daily outfit
 | Method | Path | Body | Returns |
 |---|---|---|---|
@@ -192,6 +221,9 @@ How each feature uses them:
 | POST | `/users/{uid}/outfits/{outfit_id}/feedback` | `{worn?, rating?, comment?}` | outfit |
 
 ## External services
+
+The taste profile uses Claude Opus 5.5 through `claude -p --json-schema` (`adapters/claude_cli.py`, port `StructuredModel`).
+
 
 | Purpose | Service | Notes |
 |---|---|---|
