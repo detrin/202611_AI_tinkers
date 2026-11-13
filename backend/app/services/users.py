@@ -5,7 +5,8 @@ from .base import get_one
 from .images import ImageService
 from .stylist import Stylist
 
-TEST_USER_NAME = "Test User (seed)"   # created by backend/scripts/seed_test_user.py
+TEST_USER_NAME = "Test User (seed)"   # created by backend/scripts/seed_test_user.py (Pinterest photos)
+DEMO_USER_NAME = "Demo User"          # created by backend/scripts/seed_demo_user.py (real photos of owned clothes)
 LIST_FIELDS = ("id", "name", "city", "created_at")
 
 
@@ -25,12 +26,18 @@ class UserService:
         rows = [r for r in rows if not name or name.lower() in (r.get("name") or "").lower()]
         return [{k: r.get(k) for k in LIST_FIELDS} for r in rows[:limit]]
 
-    def test_user(self) -> Row:
-        """The most recently seeded test user, so UIs and teammates never need the id passed around."""
-        rows = self._db.select("users", {"name": TEST_USER_NAME}, order_by="created_at", desc=True, limit=1)
+    def seeded(self, name: str, script: str) -> Row:
+        """Latest user with this exact seed name, so UIs and teammates never need ids passed around."""
+        rows = self._db.select("users", {"name": name}, order_by="created_at", desc=True, limit=1)
         if not rows:
-            raise NotFound("No seeded test user; run: uv run python -m backend.scripts.seed_test_user --taste")
+            raise NotFound(f"No '{name}' user yet; run: uv run python -m backend.scripts.{script} --taste")
         return rows[0]
+
+    def test_user(self) -> Row:
+        return self.seeded(TEST_USER_NAME, "seed_test_user")
+
+    def demo_user(self) -> Row:
+        return self.seeded(DEMO_USER_NAME, "seed_demo_user")
 
     def update(self, uid: str, patch: Row) -> Row:
         self.get(uid)

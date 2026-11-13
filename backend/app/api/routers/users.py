@@ -35,6 +35,12 @@ def test_user(c: Services):
     return c.users.test_user()
 
 
+@router.get("/demo-user")
+def demo_user(c: Services):
+    """The demo user (latest 'Demo User'): real photos of owned clothes. Use its `id` for demos."""
+    return c.users.demo_user()
+
+
 @router.get("/{uid}")
 def get_user(uid: str, c: Services):
     return c.users.get(uid)

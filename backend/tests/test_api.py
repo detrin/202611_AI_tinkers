@@ -73,3 +73,10 @@ def test_list_users_and_test_user_lookup(client, env):
     assert [u["name"] for u in client.get("/users?name=alice").json()] == ["Alice"]
     rows = client.get("/users?limit=2").json()
     assert len(rows) == 2 and set(rows[0]) == {"id", "name", "city", "created_at"}
+
+
+def test_demo_user_lookup(client):
+    assert client.get("/users/demo-user").status_code == 404
+    client.post("/users", json={"name": "Test User (seed)"})
+    demo = client.post("/users", json={"name": "Demo User"}).json()
+    assert client.get("/users/demo-user").json()["id"] == demo["id"]

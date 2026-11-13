@@ -50,6 +50,25 @@ tail -f ~/Library/Logs/goodenough-api.log ~/Library/Logs/goodenough-tunnel.log
 
 To run the same entrypoint locally: `uv run uvicorn backend.app.public:app --port 8000` (then both `/api/health` and `/health` work).
 
+## Demo user (for the live demo)
+
+A user whose wardrobe is **69 real photos of owned clothes** (18 jackets, 17 pants, 19 shirts, 15 pairs of shoes), every one tagged by Qwen3-VL and given an Opus taste profile:
+
+| | |
+|---|---|
+| `user_id` | `8b63ae0d-35e8-4cc7-8896-f1785c47d54c` (also in `backend/scripts/demo_user.json`) |
+| name | Demo User, Prague, budget 250 EUR, `fit_prefs.audience = menswear` |
+| taste profile | "An Ivy-leaning dresser with a strong workwear/utility streak and a black streetwear layer". Current: Ivy 32%, Workwear 22%, Streetwear 18%. Aspiration: Ivy 45%, Workwear 30%, Minimalism 25% |
+
+```bash
+curl $API/users/demo-user            # the latest "Demo User": use its id in the UI
+```
+
+To re-create it from a folder of photos (`jackets-01.jpg`, `pants-03.jpg`, …; the file name is a category hint). Photos are downscaled to 1024 px, and imports are idempotent per file. It takes about 5 min:
+```bash
+uv run python -m backend.scripts.seed_demo_user --dir ~/Downloads/Demo-whatIown-photos --taste
+```
+
 ## Test user (for UI work and manual testing)
 
 A seeded user with a real, already-tagged wardrobe lives in the shared Supabase project:

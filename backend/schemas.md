@@ -118,6 +118,7 @@ Job endpoints:
 |---|---|---|---|
 | POST | `/users` | `{name, city?, budget?, currency="EUR", fit_prefs={}, sizes={}}` | user |
 | GET | `/users` | `?name=&limit=50` | `[{id, name, city, created_at}]`, newest first; `name` = case-insensitive substring |
+| GET | `/users/demo-user` | | the latest `Demo User` (69 real photos of owned clothes; 404 if none). Use it for the live demo |
 | GET | `/users/test-user` | | the latest seeded `Test User (seed)` (404 if none). UIs use its `id` as the default user |
 | GET | `/users/{uid}` | | user |
 | PATCH | `/users/{uid}` | any user field | user |
