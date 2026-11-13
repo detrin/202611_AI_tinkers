@@ -5,11 +5,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from .api.routers import imports, inspirations, outfits, shopping, style_library, styles, system, taste, users, wardrobe
+from .api.routers import good_enough, imports, inspirations, outfits, shopping, style_library, styles, system, taste, users, wardrobe
 from .container import Container, build_container
 from .errors import DomainError
 
-ROUTERS = (system, users, wardrobe, imports, inspirations, styles, shopping, outfits, taste, style_library)
+ROUTERS = (system, users, wardrobe, imports, inspirations, styles, shopping, outfits, taste, style_library, good_enough)
 
 
 def create_app(container_factory: Callable[[], Container] = build_container) -> FastAPI:

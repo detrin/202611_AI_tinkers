@@ -22,6 +22,7 @@ class OpenMeteoWeather:
     FORECAST = "https://api.open-meteo.com/v1/forecast"
     DAILY = "temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,weather_code"
     HOURLY = "temperature_2m,apparent_temperature,precipitation_probability"
+    CURRENT = "temperature_2m,apparent_temperature,precipitation,wind_speed_10m,weather_code,is_day"
 
     def __init__(self, session: requests.Session | None = None):
         self._s = session or requests.Session()
@@ -35,6 +36,23 @@ class OpenMeteoWeather:
         params |= {"start_date": day.isoformat(), "end_date": day.isoformat()} if day else {"forecast_days": 1}
         d = self._s.get(self.FORECAST, params=params, timeout=15).json()["daily"]
         return {"city": g["name"], "country": g.get("country"), **{k: v[0] for k, v in d.items()}}
+
+    def now(self, city: str | None = None, latitude: float | None = None, longitude: float | None = None) -> dict:
+        """Current conditions + today's range, at coordinates (preferred) or a geocoded city."""
+        place: dict = {}
+        if latitude is None or longitude is None:
+            hits = self._s.get(self.GEO, params={"name": city, "count": 1}, timeout=10).json().get("results")
+            if not hits:
+                raise ValueError(f"Unknown city: {city}")
+            g = hits[0]
+            latitude, longitude, place = g["latitude"], g["longitude"], {"city": g["name"], "country": g.get("country")}
+        params = {"latitude": latitude, "longitude": longitude, "timezone": "auto", "forecast_days": 1,
+                  "current": self.CURRENT, "daily": self.DAILY}
+        r = self._s.get(self.FORECAST, params=params, timeout=10)
+        r.raise_for_status()
+        d = r.json()
+        return {**place, "latitude": latitude, "longitude": longitude, "current": d["current"],
+                "today": {k: v[0] for k, v in d["daily"].items() if k != "time"}}
 
     def hourly(self, city: str, day: date, timezone: str) -> dict:
         response = self._s.get(self.GEO, params={"name": city, "count": 1}, timeout=5)

@@ -6,6 +6,7 @@ from .ports import (AestheticSource, CalendarProvider, ChatModel, Database, Exec
                     ImageFetcher, ImageStore, PinSource, ProductSource, SocialSource, StructuredModel,
                     TrendSource, VenueProvider, WeatherProvider)
 from .services.catalog import CatalogService
+from .services.good_enough import GoodEnoughService
 from .services.feedback import ProductFeedbackService
 from .services.images import ImageService
 from .services.imports import ImportService
@@ -47,6 +48,7 @@ class Container:
     style_recs: StyleRecommendationService
     jobs: JobService
     weather: WeatherProvider
+    good_enough: GoodEnoughService
     today: TodayService
     today_api_token: str | None
 
@@ -80,6 +82,7 @@ def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, ch
         library=library, trends=TrendService(db, trends, library, taste_model),
         style_recs=StyleRecommendationService(db, users, wardrobe, inspirations, library),
         jobs=JobService(db, executor), weather=weather,
+        good_enough=GoodEnoughService(users, wardrobe, weather, stylist),
         today=TodayService(users, outfits, stylist, calendar, hourly_weather, venue, timezone),
         today_api_token=today_api_token,
     )

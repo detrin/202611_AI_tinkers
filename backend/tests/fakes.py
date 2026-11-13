@@ -85,7 +85,8 @@ class ScriptedChat:
     KINDS = {"post": "Describe the clothing the main person", "ig_style": "Infer their personal style",
              "tag": "Identify the single main", "look": "inspiration photo of a whole outfit", "color": "seasonal colour analysis", "style": "Pinterest reference",
              "profile": "Build the user's style profile", "rank": "Candidate products",
-             "verdict": "Judge whether this product", "outfit": "Build the best outfit"}
+             "verdict": "Judge whether this product", "outfit": "Build the best outfit",
+             "good_enough": "is this look good enough"}
 
     def __init__(self):
         self.calls: list[tuple[str, str, list]] = []
@@ -102,6 +103,8 @@ class ScriptedChat:
             "rank": [],
             "verdict": {"score_1to10": 7, "pairs_with": [], "redundant_with": [], "verdict": "good"},
             "outfit": {"item_ids": [], "explanation": "fine", "missing_item_tip": ""},
+            "good_enough": {"good_enough": True, "score_1to10": 8, "explanation": "Sharp.", "highlights": ["fit"],
+                            "fixes": [], "weather_note": "warm enough", "swap_item_ids": []},
             "post": {"has_outfit": True, "style_tags": ["minimal"], "colors": ["navy"], "vibe": "clean",
                      "items": [{"category": "top", "subtype": "shirt", "colors": ["navy"], "fit": "regular"},
                                {"category": "bottom", "subtype": "chinos", "colors": ["beige"], "fit": "slim"}]},
@@ -151,6 +154,13 @@ class FakeWeather:
     def daily(self, city, day: date | None = None):
         self.calls.append((city, day))
         return {"city": city, "temperature_2m_max": 8, "temperature_2m_min": 2, "precipitation_probability_max": 90}
+
+    def now(self, city=None, latitude=None, longitude=None):
+        self.calls.append(("now", city, latitude, longitude))
+        if city == "Atlantis":
+            raise ValueError("Unknown city")
+        return {"city": city, "latitude": latitude, "longitude": longitude,
+                "current": {"temperature_2m": 4, "precipitation": 0.5}, "today": {"temperature_2m_max": 8}}
 
 
 class FakeSocial:

@@ -54,6 +54,7 @@ class TrendSource(Protocol):
 
 class WeatherProvider(Protocol):
     def daily(self, city: str, day: date | None = None) -> dict: ...
+    def now(self, city: str | None = None, latitude: float | None = None, longitude: float | None = None) -> dict: ...
 
 
 class StructuredModel(Protocol):

@@ -71,6 +71,15 @@ based on the context. Never claim missing weather, commute, or event details.
 Return ONLY JSON:
 {{"item_ids":[],"explanation":"","missing_item_tip":"","venue_event_index":null}}"""
 
+GOOD_ENOUGH = """You are a blunt but kind personal stylist. The photo shows the look the user is wearing right now.
+Decide: is this look good enough to go out in? Judge fit, proportions, colour harmony, how well it suits the
+occasion, and (only if weather is given) whether it works for the weather. Use the context below as data.
+{context}
+If weather is null, do not mention or guess the weather. Only reference wardrobe item ids that appear in the context.
+Return ONLY JSON:
+{{"good_enough":true,"score_1to10":0,"explanation":"2-3 sentences, direct and specific",
+  "highlights":["what works"],"fixes":["concrete changes, empty if none"],"weather_note":"",
+  "swap_item_ids":["wardrobe ids to swap in, only if a wardrobe is given"]}}"""
 
 def parse_json(text: str):
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
@@ -126,6 +135,9 @@ class Stylist:
     def daily_outfit(self, weather: dict, event: str, wardrobe: list[dict], colors: dict | None, recent: list) -> dict:
         return self._ask(OUTFIT.format(weather=_dump(weather), event=event, colors=_dump(colors),
                                        recent=_dump(recent), wardrobe=_dump(wardrobe)))
+
+    def good_enough(self, image_url: str, context: dict) -> dict:
+        return self._ask(GOOD_ENOUGH.format(context=_dump(context)), [image_url])
 
     def today_outfit(self, context: dict, can_lookup_venue: bool) -> dict:
         venue_instruction = (
