@@ -73,9 +73,20 @@ def test_deck_never_reserves_and_swipes_keep_the_mode(env):
     first = env.c.preferences.deck(uid, 5, seed=1)
     second = env.c.preferences.deck(uid, 50, seed=2)
     assert not {p["id"] for p in first} & {p["id"] for p in second}
-    assert len(first) + len(second) == 18 and env.c.preferences.deck(uid, 5) == []
+    assert len(first) + len(second) == 18
     env.c.preferences.record(uid, [{"pin_id": first[0]["id"], "liked": True, "source": None}])
     assert env.c.preferences.board(uid)[0]["mode"] == first[0]["mode"]
+
+
+def test_deck_goes_round_again_through_unswiped_pins_once_all_were_shown(env):
+    _library(env)
+    uid = env.user()["id"]
+    shown = env.c.preferences.deck(uid, 50, seed=1)
+    swiped = shown[:5]
+    env.c.preferences.record(uid, [{"pin_id": p["id"], "liked": i % 2 == 0} for i, p in enumerate(swiped)])
+    again = env.c.preferences.deck(uid, 50, seed=2)
+    assert again and not {p["id"] for p in again} & {p["id"] for p in swiped}
+    assert {p["id"] for p in again} <= {p["id"] for p in shown}
 
 
 def test_boards_split_interested_and_not_and_stay_out_of_wardrobe(env):
@@ -153,3 +164,14 @@ def test_fill_pins_endpoint_runs_as_job(client, env):
     env.db.insert("styles", {"name": "Gorpcore", "query": "gorpcore", "status": "active"})
     job = client.post("/styles/pins/fill", json={"per_style": 2}).json()
     assert client.get(f"/jobs/{job['job_id']}").json()["result"]["pins"] == 2
+
+
+def test_deck_recycles_even_when_other_audiences_still_have_unseen_pins(env):
+    _library(env)
+    uid = env.user()["id"]
+    shown = env.c.preferences.deck(uid, 50, seed=1)
+    other = env.db.insert("styles", {"name": "Other audience", "status": "active", "audience": "womenswear"})
+    env.db.insert("style_pins", {"style_id": other["id"], "title": "x", "image_url": "u"})
+    env.c.users.update(uid, {"fit_prefs": {"audience": "menswear"}})
+    again = env.c.preferences.deck(uid, 50, seed=2)
+    assert again and {p["id"] for p in again} <= {p["id"] for p in shown}

@@ -63,10 +63,17 @@ class PreferenceService:
 
     # ---------- serving ----------
     def deck(self, uid: str, n: int, explore: float = 0.5, seed: int | None = None) -> list[Row]:
-        """Next n unseen pins. Each is logged as seen (pin_impressions) so it is never served twice."""
+        """Next n unseen pins. Each is logged as seen (pin_impressions) so it is not served again while unseen pins
+        remain. Once every pin has been shown, the ones shown but never swiped come round again, so the deck
+        never runs dry (a pin loaded on screen and left unswiped would otherwise be lost for good)."""
         _, pins, swipes, state = self._state(uid)
+        servable = {pid: p for pid, p in pins.items() if p["style_id"] in state}  # the user's audience only
+        candidates = self._unseen(uid, servable)
+        if not candidates:
+            swiped = {s["pin_id"] for s in swipes}
+            candidates = [p for p in servable.values() if p["id"] not in swiped]
         by_style: dict[str, list[Row]] = {}
-        for p in self._unseen(uid, pins):
+        for p in candidates:
             by_style.setdefault(p["style_id"], []).append(p)
         liked_terms = set().union(*(tokens(pins[s["pin_id"]].get("title")) for s in swipes
                                     if s["liked"] and s["pin_id"] in pins))
