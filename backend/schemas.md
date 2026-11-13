@@ -300,20 +300,44 @@ calendar failure appears as an unavailable tool step. If both pickers fail, the 
 | Environment variable | Today endpoint configuration |
 |---|---|
 | `TODAY_API_TOKEN` | Enables the endpoint. Send it as `Authorization: Bearer <token>` from a trusted server or local test client. Keep it on the server for a browser integration. |
+| `CALENDAR_DEMO` | Set to `1` to use the bundled sample calendar when `CALENDAR_ICS_URL` is unset. |
 | `CALENDAR_ICS_URL` | Secret iCal URL for a dedicated demo calendar. |
 | `CALENDAR_DEMO_USER_ID` | User ID allowed to read the configured demo calendar. |
 | `OUTFIT_TIMEZONE` | Local day and forecast time zone, default `Europe/Prague`. |
 | `APIFY_VENUE_LOOKUP` | Set to `1` to allow a capped lookup for the public venue in the demo calendar. Default is off. |
 
 Set the demo user's city before calling the endpoint. Set `fit_prefs.commute_mode` to `metro`, `bike`,
-`walk`, or `car` to include the usual transport. `context.events` contains local event timestamps and
-the matching forecast when available. `context.weather.rain_probability` is a fraction between 0
+`walk`, or `car` to include the usual transport. `context` includes the request date and time zone.
+Each event includes its local start and end time and the matching forecast when available. An Apify result
+adds `place_category` to the selected event, and its tool step includes the event's `event_start_time`.
+`context.weather.rain_probability` is a fraction between 0
 and 1. Use `note` to give an occasion when the calendar is empty. To replace a garment in the laundry,
 PATCH its `availability` to `laundry` through the wardrobe endpoint and call Today again.
 
 For a live check, call `/health`, then `POST /users/{uid}/outfits/today` with `{}` and the bearer token.
 Confirm that the response contains the demo event, its forecast, and signed image URLs for owned,
 available items. Repeat after marking one item as laundry.
+
+To run the sample before connecting Google Calendar, set `CALENDAR_DEMO=1` and
+`CALENDAR_DEMO_USER_ID` to the seeded user's ID. The sample has a 09:30 team meeting and 18:30
+evening plans at Café Savoy, both in `OUTFIT_TIMEZONE`. Set `APIFY_VENUE_LOOKUP=1` to let the stylist
+look up the venue. The actor is limited to one result and a $0.50 maximum per run.
+
+```bash
+export CALENDAR_DEMO_USER_ID=8b63ae0d-35e8-4cc7-8896-f1785c47d54c
+CALENDAR_DEMO=1 APIFY_VENUE_LOOKUP=1 uv run uvicorn backend.app.main:app --port 8000
+```
+
+With `TODAY_API_TOKEN` set in both shells, call the running backend from a second shell.
+
+```bash
+curl --fail-with-body -sS "http://127.0.0.1:8000/users/${CALENDAR_DEMO_USER_ID}/outfits/today" \
+  -H "Authorization: Bearer ${TODAY_API_TOKEN}" -H 'Content-Type: application/json' \
+  -d '{"note":"Dress for the evening plans at Café Savoy."}'
+```
+
+When the Google Calendar feed is ready, set `CALENDAR_ICS_URL` to its secret iCal URL and restart the backend.
+The configured feed takes precedence over the sample.
 
 ## External services
 

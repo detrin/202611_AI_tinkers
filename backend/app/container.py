@@ -100,7 +100,7 @@ def build_container(settings: Settings | None = None) -> Container:
 
     from .adapters.apify import ApifyInstagramSource, ApifyPinSource, ApifyProductSource, ApifyRunner, ApifyTrendSource
     from .adapters.apify_mcp import ApifyVenueLookup
-    from .adapters.calendar import ICalCalendar
+    from .adapters.calendar import DemoCalendar, ICalCalendar
     from .adapters.claude_cli import ClaudeCLI
     from .adapters.executors import ThreadExecutor
     from .adapters.fandom import FandomAestheticSource
@@ -113,10 +113,12 @@ def build_container(settings: Settings | None = None) -> Container:
     client = create_client(s.supabase_url, s.supabase_key)
     runner = ApifyRunner(ApifyClient(s.apify_token))
     weather = OpenMeteoWeather()
-    calendar = (
-        ICalCalendar(s.calendar_ics_url, s.calendar_demo_user_id)
-        if s.calendar_ics_url and s.calendar_demo_user_id else None
-    )
+    calendar = None
+    if s.calendar_demo_user_id:
+        if s.calendar_ics_url:
+            calendar = ICalCalendar(s.calendar_ics_url, s.calendar_demo_user_id)
+        elif s.calendar_demo:
+            calendar = DemoCalendar(s.calendar_demo_user_id)
     return build_services(
         db=SupabaseDatabase(client), store=SupabaseImageStore(client, s.bucket, s.signed_url_ttl),
         fetcher=HttpImageFetcher(), chat=_chat(s, OpenAIChat),

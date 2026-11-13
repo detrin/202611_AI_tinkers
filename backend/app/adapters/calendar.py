@@ -1,4 +1,5 @@
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import recurring_ical_events
@@ -46,3 +47,14 @@ class ICalCalendar:
         except Exception:
             # HTTP and parser errors can include the private URL or calendar contents.
             raise RuntimeError("Calendar feed unavailable") from None
+
+
+class DemoCalendar:
+    def __init__(self, demo_user_id: str):
+        self._user_id = demo_user_id
+
+    def events(self, uid: str, day: date, timezone: str) -> list[dict] | None:
+        if uid != self._user_id:
+            return None
+        content = Path(__file__).with_name("demo_calendar.ics").read_bytes()
+        return events_on_day(content, day, timezone)

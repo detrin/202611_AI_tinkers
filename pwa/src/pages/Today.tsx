@@ -69,8 +69,11 @@ export default function Today({ active, version }: { active: boolean; version: n
   async function markLaundry(item: Item) {
     setOpenItem(null)
     setLoading(true)
+    setError('')
     try {
       await api.setAvailability(item.id, 'laundry')
+      setOutfit(null)
+      saveLastOutfit(null)
       await generate(occasion, outfit?.item_ids)
     } catch (e) {
       setError(errorText(e))
@@ -88,8 +91,10 @@ export default function Today({ active, version }: { active: boolean; version: n
   const dateLabel = new Date().toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' })
   const weather = weatherLine(outfit?.weather)
   const reasons = sentences(outfit?.explanation ?? null)
-  const event = outfit?.context?.events?.[0]
-  const eventTime = event ? new Date(event.start_time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''
+  const events = outfit?.context?.events ?? []
+  const eventTime = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', timeZone: outfit?.context?.timezone,
+  })
   const commute = outfit?.context?.commute?.mode
 
   return (
@@ -117,26 +122,31 @@ export default function Today({ active, version }: { active: boolean; version: n
         </button>
       )}
 
-      <section className="context" onClick={() => setControls(true)}>
-        <p>
-          <CalendarDays size={18} />
-          {event ? (
+      <section className="context" aria-label="Today's plans">
+        {events.map((event, index) => (
+          <p key={`${event.start_time}-${index}`}>
+            <CalendarDays size={18} />
             <span>
-              {event.title} · {eventTime}
+              {eventTime.format(new Date(event.start_time))} · {event.title}
+              {event.location && ` · ${event.location}`}
               {event.place_category && ` · ${event.place_category}`}
+              <small>{weatherLine(event.weather ?? undefined) || 'Forecast unavailable'}</small>
             </span>
-          ) : (
-            <span>
-              {occasion.title}
-              {occasion.time && ` · ${occasion.time}`}
-            </span>
-          )}
-          <em>{event ? 'From your calendar' : 'Entered by you'}</em>
-        </p>
-        <p>
-          <CloudSun size={18} />
-          <span>{weather ? `${weather}${outfit?.city ? ` · ${outfit.city}` : ''}` : 'Weather loads with the outfit'}</span>
-        </p>
+          </p>
+        ))}
+        {events.length === 0 && (
+          <>
+            <p>
+              <CalendarDays size={18} />
+              <span>{occasion.title}{occasion.time && ` · ${occasion.time}`}</span>
+              <em>Entered by you</em>
+            </p>
+            <p>
+              <CloudSun size={18} />
+              <span>{weather ? `${weather}${outfit?.city ? ` · ${outfit.city}` : ''}` : 'Weather loads with the outfit'}</span>
+            </p>
+          </>
+        )}
         <p>
           <Heart size={18} />
           <span>{profile ? profileLine(profile) : 'No style profile applied'}</span>
@@ -179,7 +189,7 @@ export default function Today({ active, version }: { active: boolean; version: n
               {outfit.steps.map((s) => (
                 <p key={s.tool}>
                   <b>{title(s.tool.replace(/^get_/, '').replace(/.*\//, 'venue lookup'))}</b>
-                  <span>{s.summary}</span>
+                  <span>{s.summary}{s.event_start_time && ` · ${eventTime.format(new Date(s.event_start_time))}`}</span>
                 </p>
               ))}
               {outfit.from_fallback && <p className="tip">The agent did not answer in time, so the simpler picker chose this.</p>}
@@ -317,7 +327,7 @@ function Controls({ occasion, onApply, onClose }: { occasion: Occasion; onApply:
             </button>
           </div>
         </div>
-        <p className="hint">The calendar is not connected yet, so the occasion is typed in here.</p>
+        <p className="hint">This occasion is used when the calendar has no events for today.</p>
         <button className="btn primary" type="submit">
           Apply and suggest
         </button>

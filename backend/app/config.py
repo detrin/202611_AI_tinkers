@@ -46,6 +46,7 @@ class Settings:
     outfit_timezone: str = "Europe/Prague"
     apify_venue_lookup: bool = False
     today_api_token: str | None = None
+    calendar_demo: bool = False
 
     @classmethod
     def load(cls, secret=read_secret) -> "Settings":
@@ -66,4 +67,5 @@ class Settings:
             outfit_timezone=os.environ.get("OUTFIT_TIMEZONE", cls.outfit_timezone),
             apify_venue_lookup=os.environ.get("APIFY_VENUE_LOOKUP") == "1",
             today_api_token=os.environ.get("TODAY_API_TOKEN"),
+            calendar_demo=os.environ.get("CALENDAR_DEMO") == "1",
         )
