@@ -1,10 +1,11 @@
 import { Camera, CloudSun, ImagePlus, Share2, Shirt, X } from 'lucide-react'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { track } from '../analytics'
 import { api } from '../api'
 import { errorText, itemName } from '../format'
 import type { Item, LookPoint, LookVerdict } from '../types'
 import { Notice } from '../ui'
+import WebCamera, { hasWebcam } from '../webcam'
 
 type Phase = 'pick' | 'checking' | 'result'
 
@@ -27,6 +28,12 @@ export default function CheckLook({ occasion, onClose }: { occasion?: string; on
   const camera = useRef<HTMLInputElement>(null)
   const gallery = useRef<HTMLInputElement>(null)
   const position = useRef<Promise<GeolocationCoordinates | null> | null>(null)
+  const webcam = useRef(hasWebcam()).current // laptops: in-app camera; phones: the native camera app
+  const [live, setLive] = useState(false)
+  const noWebcam = useCallback(() => {
+    setLive(false)
+    gallery.current?.click()
+  }, [])
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
   useEffect(() => {
@@ -59,8 +66,22 @@ export default function CheckLook({ occasion, onClose }: { occasion?: string; on
 
   /** A new photo goes straight into the check: no settings to confirm first. */
   function choose(files: FileList | null) {
-    const file = files?.[0]
-    if (!file) return
+    if (files?.[0]) pick(files[0])
+  }
+
+  /** Laptops: back to the live camera. Phones: the native camera app again. */
+  function retake() {
+    if (!webcam) return camera.current?.click()
+    setPreview('')
+    setPhoto(null)
+    setResult(null)
+    setError('')
+    setPhase('pick')
+    setLive(true)
+  }
+
+  function pick(file: File) {
+    setLive(false)
     setPhoto(file)
     setPreview(URL.createObjectURL(file))
     setResult(null)
@@ -85,13 +106,17 @@ export default function CheckLook({ occasion, onClose }: { occasion?: string; on
 
       {!preview ? (
         <>
-          <button className="snap" onClick={() => camera.current?.click()}>
-            <span className="snap-ring">
-              <Camera size={34} strokeWidth={1.5} />
-            </span>
-            <strong>Take a mirror photo</strong>
-            <span>Head to toe works best</span>
-          </button>
+          {live ? (
+            <WebCamera onShot={pick} onUnavailable={noWebcam} />
+          ) : (
+            <button className="snap" onClick={() => (webcam ? setLive(true) : camera.current?.click())}>
+              <span className="snap-ring">
+                <Camera size={34} strokeWidth={1.5} />
+              </span>
+              <strong>{webcam ? 'Take a photo' : 'Take a mirror photo'}</strong>
+              <span>Head to toe works best</span>
+            </button>
+          )}
           <button className="btn" onClick={() => gallery.current?.click()}>
             <ImagePlus size={18} /> Choose from photos
           </button>
@@ -115,7 +140,7 @@ export default function CheckLook({ occasion, onClose }: { occasion?: string; on
           verdict={result}
           photo={photo}
           onSwap={() => check(photo, true)}
-          onRetake={() => camera.current?.click()}
+          onRetake={retake}
           onDone={onClose}
         />
       )}
