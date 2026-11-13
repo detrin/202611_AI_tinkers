@@ -284,8 +284,35 @@ It also keeps **current** style (what they own and wear) apart from **aspiration
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/users/{uid}/outfits/daily` | `{event="casual day", city?, date?}` (city defaults to the user's) | outfit `{item_ids, explanation, missing_item_tip, weather, items[] with image_url}` |
+| POST | `/users/{uid}/outfits/today` | `{date?, note?}` plus server bearer token | outfit, `context`, `steps`, `from_fallback` |
 | GET | `/users/{uid}/outfits` | | history |
 | POST | `/users/{uid}/outfits/{outfit_id}/feedback` | `{worn?, rating?, comment?}` | outfit |
+
+The Today endpoint uses an internal MCP session to read the calendar, hourly weather, owned and available
+clothes, recent outfits, and the user's usual transport. The backend gathers these inputs in parallel.
+Featherless picks the outfit and can request one venue lookup through Apify MCP when enabled.
+The fallback uses the existing stylist with the same availability rules. The endpoint saves the outfit
+in the existing table and returns event context and tool summaries with the response. A forecast or
+calendar failure appears as an unavailable tool step. If both pickers fail, the endpoint returns
+`503`. If no owned clothes are available, it returns `409`.
+
+| Environment variable | Today endpoint configuration |
+|---|---|
+| `TODAY_API_TOKEN` | Enables the endpoint. Send it as `Authorization: Bearer <token>` from a trusted server or local test client. Keep it on the server for a browser integration. |
+| `CALENDAR_ICS_URL` | Secret iCal URL for a dedicated demo calendar. |
+| `CALENDAR_DEMO_USER_ID` | User ID allowed to read the configured demo calendar. |
+| `OUTFIT_TIMEZONE` | Local day and forecast time zone, default `Europe/Prague`. |
+| `APIFY_VENUE_LOOKUP` | Set to `1` to allow a capped lookup for the public venue in the demo calendar. Default is off. |
+
+Set the demo user's city before calling the endpoint. Set `fit_prefs.commute_mode` to `metro`, `bike`,
+`walk`, or `car` to include the usual transport. `context.events` contains local event timestamps and
+the matching forecast when available. `context.weather.rain_probability` is a fraction between 0
+and 1. Use `note` to give an occasion when the calendar is empty. To replace a garment in the laundry,
+PATCH its `availability` to `laundry` through the wardrobe endpoint and call Today again.
+
+For a live check, call `/health`, then `POST /users/{uid}/outfits/today` with `{}` and the bearer token.
+Confirm that the response contains the demo event, its forecast, and signed image URLs for owned,
+available items. Repeat after marking one item as laundry.
 
 ## External services
 

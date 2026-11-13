@@ -28,6 +28,11 @@ class Settings:
     bucket: str = "images"
     signed_url_ttl: int = 3600
     job_workers: int = 4
+    calendar_ics_url: str | None = None
+    calendar_demo_user_id: str | None = None
+    outfit_timezone: str = "Europe/Prague"
+    apify_venue_lookup: bool = False
+    today_api_token: str | None = None
 
     @classmethod
     def load(cls, secret=read_secret) -> "Settings":
@@ -39,4 +44,9 @@ class Settings:
             vision_model=os.environ.get("VISION_MODEL", cls.vision_model),
             text_model=os.environ.get("TEXT_MODEL", cls.text_model),
             taste_model=os.environ.get("TASTE_MODEL", cls.taste_model),
+            calendar_ics_url=os.environ.get("CALENDAR_ICS_URL"),
+            calendar_demo_user_id=os.environ.get("CALENDAR_DEMO_USER_ID"),
+            outfit_timezone=os.environ.get("OUTFIT_TIMEZONE", cls.outfit_timezone),
+            apify_venue_lookup=os.environ.get("APIFY_VENUE_LOOKUP") == "1",
+            today_api_token=os.environ.get("TODAY_API_TOKEN"),
         )
