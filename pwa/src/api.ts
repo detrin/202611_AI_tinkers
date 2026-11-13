@@ -75,6 +75,7 @@ export const api = {
   swipe: (pinId: string, liked: boolean) =>
     req<unknown>(`/users/${uid()}/swipes`, json('POST', [{ pin_id: pinId, liked, source: 'deck' }])),
   likedPins: () => req<Pin[]>(`/users/${uid()}/swipes?liked=true`),
+  skippedPins: () => req<Pin[]>(`/users/${uid()}/swipes?liked=false`),
 
   /** Agent endpoint: reads calendar, hourly weather, commute and wardrobe through MCP tools. */
   todayOutfit: (note: string) => req<Outfit>(`/users/${uid()}/outfits/today`, json('POST', { note })),

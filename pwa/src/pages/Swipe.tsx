@@ -56,6 +56,15 @@ export default function Swipe({ onBack }: { onBack: () => void }) {
         fresh.push(...more.filter((m) => fitsAudience(m, audience.current ?? undefined)))
         spare.current.push(...more.filter((m) => !fitsAudience(m, audience.current ?? undefined)))
       }
+      if (fresh.length === 0 && pool.current.length === 0) {
+        // The server has served every look already. Bring back the ones swiped before, so the deck is never empty.
+        const [liked, skipped] = await Promise.all([api.likedPins().catch(() => []), api.skippedPins().catch(() => [])])
+        const old = [...liked, ...skipped]
+          .filter((m) => m.image_url)
+          .map((m) => ({ ...m, id: m.pin_id || m.id, reason: m.reason || 'One more look at this one' }))
+        const mine = old.filter((m) => fitsAudience(m, audience.current ?? undefined))
+        fresh.push(...(mine.length >= 3 ? mine : old))
+      }
       pool.current.push(...fresh.filter((m) => !pool.current.some((x) => x.id === m.id)))
       setDeck((d) => {
         const add = fresh.filter((m) => !d.some((x) => x.id === m.id))
