@@ -52,7 +52,7 @@ To run the same entrypoint locally: `uv run uvicorn backend.app.public:app --por
 
 ## Demo user (for the live demo)
 
-A user whose wardrobe is **69 real photos of owned clothes** (18 jackets, 17 pants, 19 shirts, 15 pairs of shoes), every one tagged by Qwen3-VL and given an Opus taste profile:
+A user whose wardrobe is **74 real photos of owned clothes** (18 jackets, 17 pants, 19 shirts, 15 pairs of shoes, 5 hoodies/sweatshirts), every one tagged by Qwen3-VL and given an Opus taste profile:
 
 | | |
 |---|---|
@@ -67,7 +67,9 @@ curl $API/users/demo-user            # the latest "Demo User": use its id in the
 To re-create it from a folder of photos (`jackets-01.jpg`, `pants-03.jpg`, …; the file name is a category hint). Photos are downscaled to 1024 px, and imports are idempotent per file. It takes about 5 min:
 ```bash
 uv run python -m backend.scripts.seed_demo_user --dir ~/Downloads/Demo-whatIown-photos --taste
+uv run python -m backend.scripts.seed_demo_user --dir "~/Downloads/hoodie design" --label hoodies --append --taste
 ```
+`--append` adds photos to the existing demo user. `--label` sets the category hint when file names are hashes. AVIF images are supported.
 
 ## Test user (for UI work and manual testing)
 
