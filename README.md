@@ -56,16 +56,17 @@ A seeded user with a real, already-tagged wardrobe lives in the shared Supabase 
 
 | | |
 |---|---|
-| `user_id` | `{{UID}}` |
-| name | Test User (seed), Prague, budget 200 EUR, sizes M / 43 |
-| owned items (8) | chinos, oxford shirt, white sneakers, denim jacket, black Chelsea boots, green Aran sweater, Breton striped top, high-waisted jeans |
-| wanted (2) | penny loafers, cashmere scarf |
-| inspiration looks (4) | London Fashion Week street style ×3, Pitti Uomo |
-| taste profile | built with Claude Opus 5.5 |
+| `user_id` | `24272756-ee74-40ac-81a8-2669e9a7bc69` |
+| name | Test User (seed), Prague, budget 200 EUR, sizes M / 43, `fit_prefs.audience = menswear` |
+| owned items (8) | white dress shirt, beige chinos, white sneakers, light denim jacket, black Chelsea boots, grey sweater, navy/white striped long-sleeve tee, dark jeans |
+| wanted (2) | brown penny loafers, camel cashmere (the tagger says "sweater"; it's a scarf photo) |
+| inspiration looks (4) | old money, quiet luxury, dark academia and Scandinavian minimalist menswear looks |
+| taste profile | Opus 5.5, confidence 0.55. Current: minimalism, normcore, Parisian, business casual. Aspiration: preppy, old money, minimalism in earth tones |
+| style recommendations | Workwear (owns 6 of 10 key pieces), Black Ivy, Scandinavian, Eclectic Grandpa, E-Boy (rising), … |
 
-The ID is also saved in `backend/scripts/test_user.json`. All photos are from Wikimedia Commons.
+The ID is also saved in `backend/scripts/test_user.json`. The photos are the first Pinterest pin for each search (Apify `automation-lab/pinterest-scraper`), tagged by Qwen3-VL.
 
-To make a fresh one (new user every run, about 3–5 min; Wikimedia rate-limits downloads):
+To make a fresh one (new user every run, about 2–4 min):
 ```bash
 uv run python -m backend.scripts.seed_test_user           # wardrobe, wishlist and inspirations
 uv run python -m backend.scripts.seed_test_user --taste   # ...and build the taste profile with Opus
@@ -86,7 +87,7 @@ The sidebar picks the API (localhost or the public tunnel) and the `user_id`. It
 
 ```bash
 API=http://localhost:8000
-UID={{UID}}
+UID=24272756-ee74-40ac-81a8-2669e9a7bc69
 
 curl $API/users/$UID                                   # profile basics
 curl "$API/users/$UID/wardrobe"                        # owned items (signed image_url valid 1 h)
@@ -94,6 +95,9 @@ curl "$API/users/$UID/wardrobe?status=wanted"          # wishlist   (status=all 
 curl $API/users/$UID/inspirations                      # saved looks
 curl $API/users/$UID/taste-profile                     # latest Opus taste profile
 curl $API/users/$UID/taste-profile/evidence            # what the model sees (no LLM call)
+curl "$API/users/$UID/style-recommendations?n=5"       # style cards: coverage, missing pieces, reasons, trend
+curl "$API/style-library/trending?stage=rising"        # rising styles (Google Trends, weekly)
+curl $API/style-library                                # 43 styles grounded in Aesthetics Wiki (+ discovered)
 
 # daily outfit for the user's city (Prague), owned items only
 curl -X POST $API/users/$UID/outfits/daily -H 'Content-Type: application/json' -d '{"event":"office day"}'

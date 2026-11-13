@@ -80,7 +80,9 @@ uv run pytest          # 60 unit tests, ~0.5 s, all fakes (tests/fakes.py)
 | `images` | id, user_id, bucket_path, source_url, kind (wardrobe/selfie/pin/product) | Storage index |
 | `wardrobe_items` | id, user_id, image_id, **status (owned/wanted)**, **product_id**, category, subtype, colors[], pattern, material, formality 1-5, warmth 1-5, style_tags[], raw jsonb | single garments, tagged by the vision model. `wanted` = wishlist, optionally linked to a shop product |
 | `inspirations` | id, user_id, image_id, pin_id, source_url, style_tags[], palette[], formality, vibe, pieces jsonb, raw | whole looks (upload, URL or saved pin), tagged as a look; unique (user_id, pin_id) |
-| `styles` | id, name (unique), query, summary jsonb | shared style library |
+| `styles` | id, name (unique), status (active/candidate/rejected), definition, key_pieces[], palette[], materials[], formality_min/max, seasons[], aliases[], related[], search_term, source, source_url, lifecycle, trend jsonb, summary jsonb | shared style library, grounded in Aesthetics Wiki (CC BY-SA, `source_url`) or trend discovery |
+| `style_trend_snapshots` | id, style_id, term, geo, points jsonb `[[date, 0-100]]`, rising jsonb `[[query, %]]`, metrics jsonb | weekly Google Trends history per style |
+| `user_style_feedback` | (user_id, style_id) PK, interested | "not for me" removes a style from recommendations |
 | `style_pins` | id, style_id, pin_url (unique), image_url, title | Pinterest reference pins |
 | `swipes` | (user_id, pin_id) PK, liked | preference signal |
 | `profiles` | id, user_id, style_mix jsonb, taste_summary, gaps jsonb, queries[] | append-only; the latest row is the current profile |
@@ -194,6 +196,59 @@ How the deck picks pins (`services/style_deck.py`, a Beta-Bernoulli bandit over 
 |---|---|---|---|
 | POST | `/users/{uid}/links` | `{url}` | **job**: scrape the product page, then a verdict `{score_1to10, pairs_with[], verdict, redundant_with[]}` |
 | GET | `/users/{uid}/links` | | history with product info |
+
+### Style library, trends and style recommendations
+Styles are fuzzy, so each one is grounded in online data:
+- **Names and definitions:** Aesthetics Wiki infobox and "Fashion" section → Opus normalises them into one schema.
+- **Momentum:** Google Trends gives 12 months of weekly interest for each style's short `search_term`.
+- **New names:** rising related queries → Opus picks the ones that are genuinely new styles.
+
+| Method | Path | Body / params | Returns |
+|---|---|---|---|
+| GET | `/style-library` | | active styles with definition, key_pieces, palette, lifecycle, trend |
+| POST | `/style-library/seed` | `{names?}` (default: built-in list of ~40) | **job**: wiki pages → Opus → upsert by name. `{defined, grounded_in_wiki}` |
+| POST | `/style-library/trends/refresh` | `{geo=""}` (ISO country, "" = worldwide) | **job**: one Apify Google Trends run for all styles → snapshot + `lifecycle` |
+| POST | `/style-library/discover` | `{max_new=5}` | **job**: rising queries from the latest snapshots → Opus picks new style names → defined + added (`source=trends_discovery`) |
+| GET | `/style-library/trending` | `?stage=emerging\|rising\|peak\|stable\|fading\|low_volume&limit=20` | styles sorted by growth |
+| GET | `/style-library/rising-queries` | `?limit=50` | `[{query, growth, near}]` (raw discovery signal) |
+| GET | `/users/{uid}/style-recommendations` | `?n=5` | style cards (see below) |
+| POST | `/users/{uid}/style-recommendations/{style_id}/feedback` | `{interested}` | `interested=false` excludes the style |
+
+**Lifecycle**, computed from the last 8 weeks against the 8 weeks before. Google values are relative to each term's own peak, so a style is only ever compared with its own past.
+
+| Stage | Rule |
+|---|---|
+| `emerging` | growth ≥ 50% and still below 50/100 |
+| `rising` | growth ≥ 15% |
+| `fading` | growth ≤ −15% |
+| `peak` | at least 70/100 |
+| `stable` | none of the above |
+| `low_volume` | fewer than half of the last 16 weeks have any data (the term is too niche to judge) |
+
+The growth calculation never divides by less than 5, to avoid a "+2000%" from a near-zero baseline.
+
+**Style card scoring** is deterministic and explainable:
+
+`score = 0.35·aspiration + 0.30·wardrobe coverage + 0.15·colour fit + trend bonus − 0.25·already wears`
+
+The trend bonus by stage:
+
+| Stage | Bonus |
+|---|---|
+| emerging | +0.15 |
+| rising | +0.10 |
+| peak | +0.05 |
+| fading | −0.05 |
+
+A greedy diversity step then subtracts 0.10 from styles related to ones already picked.
+
+How each term is measured:
+- **Aspiration:** match with the taste profile's aspirational `style_mix` and palette. Without a taste profile it falls back to inspiration and wishlist style tags.
+- **Coverage:** the share of the style's `key_pieces` matched by owned items that share a garment word.
+- **Colour fit:** palette overlap with the colour profile and taste-profile colours, minus overlap with colours to avoid.
+- **Already wears:** match with the current `style_mix`.
+
+Card: `{id, name, definition, palette, key_pieces, lifecycle, trend, source_url, score, components{aspiration, coverage, color_fit, trend, already_wears}, owned_pieces[{piece, item_id, subtype}], missing_pieces[], reasons[]}`. Feed `missing_pieces` into `POST /users/{uid}/recommendations` with `{queries}` to shop the gap.
 
 ### Taste profile (Claude Opus via `claude -p`)
 | Method | Path | Returns |
