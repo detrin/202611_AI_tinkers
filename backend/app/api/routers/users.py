@@ -23,6 +23,18 @@ def create_user(body: UserIn, c: Services):
     return c.users.create(body.model_dump())
 
 
+@router.get("")
+def list_users(c: Services, name: str | None = None, limit: int = 50):
+    """Newest first, compact rows. `?name=` filters by case-insensitive substring."""
+    return c.users.list(name, limit)
+
+
+@router.get("/test-user")
+def test_user(c: Services):
+    """The seeded test user (latest 'Test User (seed)'): use its `id` as the default user in UIs."""
+    return c.users.test_user()
+
+
 @router.get("/{uid}")
 def get_user(uid: str, c: Services):
     return c.users.get(uid)

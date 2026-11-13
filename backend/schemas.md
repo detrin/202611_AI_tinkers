@@ -117,6 +117,8 @@ Job endpoints:
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/users` | `{name, city?, budget?, currency="EUR", fit_prefs={}, sizes={}}` | user |
+| GET | `/users` | `?name=&limit=50` | `[{id, name, city, created_at}]`, newest first; `name` = case-insensitive substring |
+| GET | `/users/test-user` | | the latest seeded `Test User (seed)` (404 if none). UIs use its `id` as the default user |
 | GET | `/users/{uid}` | | user |
 | PATCH | `/users/{uid}` | any user field | user |
 | POST | `/users/{uid}/selfie` | multipart `file` **or** form `image_url` | colour profile `{season, undertone, contrast, best_colors[], avoid_colors[], notes}`, also saved on the user |

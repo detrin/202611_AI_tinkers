@@ -64,7 +64,12 @@ A seeded user with a real, already-tagged wardrobe lives in the shared Supabase 
 | taste profile | Opus 5.5, confidence 0.55. Current: minimalism, normcore, Parisian, business casual. Aspiration: preppy, old money, minimalism in earth tones |
 | style recommendations | Workwear (owns 6 of 10 key pieces), Black Ivy, Scandinavian, Eclectic Grandpa, E-Boy (rising), … |
 
-The ID is also saved in `backend/scripts/test_user.json`. The photos are the first Pinterest pin for each search (Apify `automation-lab/pinterest-scraper`), tagged by Qwen3-VL.
+You don't need anyone to send you the ID. Ask the API for it, so UIs can default to it:
+```bash
+curl $API/users/test-user          # the latest seeded "Test User (seed)", with its id
+curl "$API/users?name=seed"        # list users (newest first, ?name= filters by substring)
+```
+The ID is also in `backend/scripts/test_user.json` in git. The photos are the first Pinterest pin for each search (Apify `automation-lab/pinterest-scraper`), tagged by Qwen3-VL.
 
 To make a fresh one (new user every run, about 2–4 min):
 ```bash

@@ -14,6 +14,7 @@ from apify_client import ApifyClient
 from backend.app.adapters.apify import ApifyPinSource, ApifyRunner
 from backend.app.config import read_secret
 from backend.app.container import build_container
+from backend.app.services.users import TEST_USER_NAME
 
 OUT = Path(__file__).with_name("test_user.json")
 
@@ -24,7 +25,7 @@ OWNED = ["white oxford shirt men flat lay", "beige chino trousers men", "white l
 WANTED = ["brown penny loafers men", "camel cashmere scarf"]
 INSPIRATION = ["old money outfit men street style", "quiet luxury men outfit", "dark academia men outfit",
                "scandinavian minimalist men outfit"]
-USER = {"name": "Test User (seed)", "city": "Prague", "budget": 200, "currency": "EUR",
+USER = {"name": TEST_USER_NAME, "city": "Prague", "budget": 200, "currency": "EUR",
         "fit_prefs": {"prefers": "regular to relaxed", "avoid": "skinny"}, "sizes": {"top": "M", "shoe": "43"}}
 
 
