@@ -55,5 +55,17 @@ class StructuredModel(Protocol):
     def generate(self, prompt: str, schema: dict) -> dict: ...
 
 
+class HourlyWeatherProvider(Protocol):
+    def hourly(self, city: str, day: date, timezone: str) -> Row: ...
+
+
+class CalendarProvider(Protocol):
+    def events(self, uid: str, day: date, timezone: str) -> list[Row] | None: ...
+
+
+class VenueProvider(Protocol):
+    async def category(self, location: str, city: str) -> str | None: ...
+
+
 class Executor(Protocol):
     def submit(self, fn: Callable[[], None]) -> None: ...

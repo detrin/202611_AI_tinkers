@@ -81,6 +81,9 @@ class WardrobeService:
              color: str | None = None) -> list[Row]:
         return self._images.with_urls(self.items(uid, status, category, color))
 
+    def available(self, uid: str) -> list[Row]:
+        return [item for item in self.items(uid) if item.get("availability", "available") == "available"]
+
     def for_product(self, uid: str, product_id: str) -> Row | None:
         rows = self._db.select("wardrobe_items", {"user_id": uid, "product_id": product_id}, limit=1)
         return rows[0] if rows else None

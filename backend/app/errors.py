@@ -15,3 +15,7 @@ class Conflict(DomainError):
 
 class Invalid(DomainError):
     status_code = 422
+
+
+class Unavailable(DomainError):
+    status_code = 503

@@ -89,6 +89,11 @@ class DailyIn(BaseModel):
     date: dt.date | None = None
 
 
+class TodayIn(BaseModel):
+    date: dt.date | None = None
+    note: str | None = Field(None, max_length=500)
+
+
 class OutfitFeedbackIn(Patch):
     worn: bool | None = None
     rating: int | None = Field(None, ge=1, le=5)

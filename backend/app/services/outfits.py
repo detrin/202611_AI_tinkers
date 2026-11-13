@@ -27,15 +27,21 @@ class OutfitService:
         if not (items := self._wardrobe.items(uid)):
             raise Conflict("Wardrobe is empty")
         weather = self._weather.daily(city, day)
-        outfit = self._stylist.daily_outfit(weather, event, summarise(items), user.get("color_profile"), self._recent(uid))
+        outfit = self._stylist.daily_outfit(weather, event, summarise(items), user.get("color_profile"), self.recent(uid))
+        return self.save(uid, event, city, day or date.today(), weather, items, outfit)
+
+    def available(self, uid: str) -> list[Row]:
+        return self._wardrobe.available(uid)
+
+    def save(self, uid: str, event: str, city: str, day: date, weather: Row, items: list[Row], outfit: Row) -> Row:
         owned = {i["id"] for i in items}
         saved = self._db.insert("outfits", {
-            "user_id": uid, "date": (day or date.today()).isoformat(), "event": event, "city": city, "weather": weather,
+            "user_id": uid, "date": day.isoformat(), "event": event, "city": city, "weather": weather,
             "item_ids": [i for i in outfit.get("item_ids", []) if i in owned],
             "explanation": outfit.get("explanation"), "missing_item_tip": outfit.get("missing_item_tip")})
         return saved | {"items": self._images.with_urls([i for i in items if i["id"] in saved["item_ids"]])}
 
-    def _recent(self, uid: str) -> list[str]:
+    def recent(self, uid: str) -> list[str]:
         outfits = self._db.select("outfits", {"user_id": uid}, order_by="created_at", desc=True, limit=RECENT_OUTFITS)
         return [i for o in outfits for i in o.get("item_ids") or []]
 
