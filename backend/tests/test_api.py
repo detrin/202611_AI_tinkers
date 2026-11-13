@@ -62,3 +62,14 @@ def test_daily_outfit_endpoint(client):
     client.post(f"/users/{uid}/wardrobe", data={"image_urls": ["https://img/1.jpg"]})
     r = client.post(f"/users/{uid}/outfits/daily", json={"event": "office", "date": "2026-11-13"})
     assert r.status_code == 200 and r.json()["weather"]["city"] == "Prague"
+
+
+def test_list_users_and_test_user_lookup(client, env):
+    assert client.get("/users/test-user").status_code == 404
+    old = client.post("/users", json={"name": "Test User (seed)"}).json()
+    client.post("/users", json={"name": "Alice"})
+    new = client.post("/users", json={"name": "Test User (seed)", "city": "Prague"}).json()
+    assert client.get("/users/test-user").json()["id"] == new["id"] != old["id"]     # latest seed wins
+    assert [u["name"] for u in client.get("/users?name=alice").json()] == ["Alice"]
+    rows = client.get("/users?limit=2").json()
+    assert len(rows) == 2 and set(rows[0]) == {"id", "name", "city", "created_at"}

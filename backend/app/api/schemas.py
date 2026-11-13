@@ -55,9 +55,16 @@ class StylesRefresh(BaseModel):
     pins_per_style: int = Field(12, ge=1, le=50)
 
 
+class PinsFill(BaseModel):
+    per_style: int = Field(12, ge=1, le=50)
+    only_missing: bool = True
+    style_ids: list[str] | None = None
+
+
 class Swipe(BaseModel):
     pin_id: str
     liked: bool
+    source: Literal["deck", "recommendations"] | None = Field(None, description="where it was swiped; default deck")
 
 
 class RecommendationsIn(BaseModel):

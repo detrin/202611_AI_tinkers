@@ -45,6 +45,23 @@ class SocialPost:
     timestamp: str | None = None
 
 
+@dataclass(frozen=True)
+class AestheticPage:
+    """A style as documented on Aesthetics Wiki: infobox fields + the page's fashion text."""
+    title: str
+    url: str
+    infobox: dict = field(default_factory=dict)
+    fashion_text: str = ""
+
+
+@dataclass(frozen=True)
+class TrendSeries:
+    """Google Trends result for one term: weekly interest (0-100) + rising related queries."""
+    term: str
+    points: tuple[tuple[str, int], ...]
+    rising: tuple[tuple[str, int], ...] = ()
+
+
 def sniff_mime(content: bytes, default: str = "image/jpeg") -> str:
     """Best-effort image type from magic bytes (shops often serve png/webp behind .jpg URLs)."""
     if content.startswith(b"\x89PNG"):

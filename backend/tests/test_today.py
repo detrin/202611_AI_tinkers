@@ -34,7 +34,7 @@ def today_client(env, *, calendar=None, weather=None, venue=None):
     container = build_services(
         db=env.db, store=env.store, fetcher=env.fetcher, chat=env.chat, pins=env.pins,
         products=env.products, social=env.social, weather=env.weather, taste_model=env.taste_model,
-        executor=InlineExecutor(),
+        aesthetics=env.aesthetics, trends=env.trends, executor=InlineExecutor(),
         calendar=calendar, hourly_weather=weather, venue=venue, today_api_token="demo-test-token",
     )
     return TestClient(create_app(lambda: container))

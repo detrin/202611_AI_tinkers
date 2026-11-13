@@ -6,6 +6,12 @@ from backend.app.adapters.featherless import FeatherlessChat
 from backend.app.domain import ImageInput
 
 
+def test_to_pin_automation_lab_format_skips_videos():
+    pin = to_pin({"url": "u", "title": "", "altText": "white oxford", "imageUrl": "https://i.pinimg.com/originals/a/b.jpg"})
+    assert (pin.image_url, pin.title) == ("https://i.pinimg.com/originals/a/b.jpg", "white oxford")   # 474x not reliable
+    assert to_pin({"url": "u", "imageUrl": "x.jpg", "isVideo": True}) is None
+
+
 def test_to_pin_uses_474_image_and_skips_imageless():
     pin = to_pin({"url": "u", "grid_title": "t", "images": {"474x": {"url": "i"}}})
     assert (pin.url, pin.image_url, pin.title) == ("u", "i", "t")

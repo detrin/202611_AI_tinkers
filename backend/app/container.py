@@ -2,8 +2,9 @@
 from dataclasses import dataclass
 
 from .config import Settings
-from .ports import (CalendarProvider, ChatModel, Database, Executor, HourlyWeatherProvider, ImageFetcher,
-                    ImageStore, PinSource, ProductSource, SocialSource, StructuredModel, VenueProvider, WeatherProvider)
+from .ports import (AestheticSource, CalendarProvider, ChatModel, Database, Executor, HourlyWeatherProvider,
+                    ImageFetcher, ImageStore, PinSource, ProductSource, SocialSource, StructuredModel,
+                    TrendSource, VenueProvider, WeatherProvider)
 from .services.catalog import CatalogService
 from .services.feedback import ProductFeedbackService
 from .services.images import ImageService
@@ -15,8 +16,11 @@ from .services.outfits import OutfitService
 from .services.preferences import PreferenceService
 from .services.profiles import ProfileService
 from .services.recommendations import RecommendationService
+from .services.style_library import StyleLibraryService
+from .services.style_recs import StyleRecommendationService
 from .services.styles import StyleService
 from .services.taste import TasteService
+from .services.trends import TrendService
 from .services.stylist import Stylist
 from .services.today import TodayService
 from .services.users import UserService
@@ -38,6 +42,9 @@ class Container:
     links: LinkService
     outfits: OutfitService
     taste: TasteService
+    library: StyleLibraryService
+    trends: TrendService
+    style_recs: StyleRecommendationService
     jobs: JobService
     weather: WeatherProvider
     today: TodayService
@@ -46,7 +53,8 @@ class Container:
 
 def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, chat: ChatModel, pins: PinSource,
                    products: ProductSource, social: SocialSource, weather: WeatherProvider,
-                   taste_model: StructuredModel, executor: Executor, calendar: CalendarProvider | None = None,
+                   taste_model: StructuredModel, aesthetics: AestheticSource, trends: TrendSource,
+                   executor: Executor, calendar: CalendarProvider | None = None,
                    hourly_weather: HourlyWeatherProvider | None = None, venue: VenueProvider | None = None,
                    timezone: str = "Europe/Prague", today_api_token: str | None = None) -> Container:
     stylist = Stylist(chat)
@@ -59,6 +67,7 @@ def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, ch
     profiles = ProfileService(db, users, wardrobe, inspirations, styles, prefs, stylist)
     catalog = CatalogService(db, products)
     outfits = OutfitService(db, users, wardrobe, images, weather, stylist)
+    library = StyleLibraryService(db, aesthetics, taste_model)
     return Container(
         images=images, users=users, wardrobe=wardrobe, inspirations=inspirations, styles=styles, preferences=prefs,
         profiles=profiles,
@@ -66,8 +75,11 @@ def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, ch
         feedback=ProductFeedbackService(db, wardrobe),
         imports=ImportService(db, users, images, wardrobe, catalog, social, stylist),
         links=LinkService(db, users, catalog, profiles, wardrobe, stylist),
+        outfits=outfits,
         taste=TasteService(db, users, wardrobe, inspirations, prefs, styles, taste_model),
-        outfits=outfits, jobs=JobService(db, executor), weather=weather,
+        library=library, trends=TrendService(db, trends, library, taste_model),
+        style_recs=StyleRecommendationService(db, users, wardrobe, inspirations, library),
+        jobs=JobService(db, executor), weather=weather,
         today=TodayService(users, outfits, stylist, calendar, hourly_weather, venue, timezone),
         today_api_token=today_api_token,
     )
@@ -77,11 +89,12 @@ def build_container(settings: Settings | None = None) -> Container:
     from apify_client import ApifyClient
     from supabase import create_client
 
-    from .adapters.apify import ApifyInstagramSource, ApifyPinSource, ApifyProductSource, ApifyRunner
+    from .adapters.apify import ApifyInstagramSource, ApifyPinSource, ApifyProductSource, ApifyRunner, ApifyTrendSource
     from .adapters.apify_mcp import ApifyVenueLookup
     from .adapters.calendar import ICalCalendar
     from .adapters.claude_cli import ClaudeCLI
     from .adapters.executors import ThreadExecutor
+    from .adapters.fandom import FandomAestheticSource
     from .adapters.featherless import FeatherlessChat
     from .adapters.html import FallbackProductSource, HtmlProductSource
     from .adapters.supabase import SupabaseDatabase, SupabaseImageStore
@@ -101,6 +114,7 @@ def build_container(settings: Settings | None = None) -> Container:
         pins=ApifyPinSource(runner), products=FallbackProductSource(HtmlProductSource(), ApifyProductSource(runner)),
         social=ApifyInstagramSource(runner), weather=weather, hourly_weather=weather,
         taste_model=ClaudeCLI(s.taste_model),
+        aesthetics=FandomAestheticSource(), trends=ApifyTrendSource(runner),
         executor=ThreadExecutor(s.job_workers),
         calendar=calendar, venue=ApifyVenueLookup(s.apify_token) if s.apify_venue_lookup else None,
         timezone=s.outfit_timezone, today_api_token=s.today_api_token,

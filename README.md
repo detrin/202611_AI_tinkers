@@ -25,32 +25,74 @@ Secrets are read from env vars first, then the macOS Keychain:
 - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `FEATHERLESS_API_KEY`, `APIFY_TOKEN`
 - the taste profile also needs the `claude` CLI, installed and logged in
 
+## Public URL
+
+The API is live at **https://goodenough.hermandaniel.com/api**. Swagger UI: https://goodenough.hermandaniel.com/api/docs
+
+```bash
+curl https://goodenough.hermandaniel.com/api/health   # {"ok":true}
+API=https://goodenough.hermandaniel.com/api          # use instead of http://localhost:8000 in the examples below
+```
+
+How it is wired:
+- A Cloudflare Tunnel (`goodenough`) runs on Daniel's Mac and forwards `/api/...` to `127.0.0.1:8000`. The tunnel can't rewrite paths, so the server runs `backend.app.public:app`. That entrypoint serves the same app under `/api` (and still under `/` for local use).
+- Everything outside `/api` returns 404 for now. The site will take over `/` later, as a second tunnel rule (or a separate host), and the frontend then calls `/api` on the same origin, so no CORS setup is needed.
+- It is only up while that Mac is awake. It runs on the Mac because it needs the Keychain secrets and the `claude` login.
+- There is no authentication yet, so don't post the URL publicly. Anyone with it can create users and start paid scraping and LLM jobs.
+
+Operating it (on the Mac):
+```bash
+launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-api      # restart the API, e.g. after git pull
+launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-tunnel   # restart the tunnel
+tail -f ~/Library/Logs/goodenough-api.log ~/Library/Logs/goodenough-tunnel.log
+# config: ~/Library/LaunchAgents/com.hermandaniel.goodenough-{api,tunnel}.plist, ~/.cloudflared/goodenough.yml
+```
+
+To run the same entrypoint locally: `uv run uvicorn backend.app.public:app --port 8000` (then both `/api/health` and `/health` work).
+
 ## Test user (for UI work and manual testing)
 
 A seeded user with a real, already-tagged wardrobe lives in the shared Supabase project:
 
 | | |
 |---|---|
-| `user_id` | `{{UID}}` |
-| name | Test User (seed), Prague, budget 200 EUR, sizes M / 43 |
-| owned items (8) | chinos, oxford shirt, white sneakers, denim jacket, black Chelsea boots, green Aran sweater, Breton striped top, high-waisted jeans |
-| wanted (2) | penny loafers, cashmere scarf |
-| inspiration looks (4) | London Fashion Week street style ×3, Pitti Uomo |
-| taste profile | built with Claude Opus 5.5 |
+| `user_id` | `24272756-ee74-40ac-81a8-2669e9a7bc69` |
+| name | Test User (seed), Prague, budget 200 EUR, sizes M / 43, `fit_prefs.audience = menswear` |
+| owned items (8) | white dress shirt, beige chinos, white sneakers, light denim jacket, black Chelsea boots, grey sweater, navy/white striped long-sleeve tee, dark jeans |
+| wanted (2) | brown penny loafers, camel cashmere (the tagger says "sweater"; it's a scarf photo) |
+| inspiration looks (4) | old money, quiet luxury, dark academia and Scandinavian minimalist menswear looks |
+| taste profile | Opus 5.5, confidence 0.55. Current: minimalism, normcore, Parisian, business casual. Aspiration: preppy, old money, minimalism in earth tones |
+| style recommendations | Workwear (owns 6 of 10 key pieces), Black Ivy, Scandinavian, Eclectic Grandpa, E-Boy (rising), … |
 
-The ID is also saved in `backend/scripts/test_user.json`. All photos are from Wikimedia Commons.
+You don't need anyone to send you the ID. Ask the API for it, so UIs can default to it:
+```bash
+curl $API/users/test-user          # the latest seeded "Test User (seed)", with its id
+curl "$API/users?name=seed"        # list users (newest first, ?name= filters by substring)
+```
+The ID is also in `backend/scripts/test_user.json` in git. The photos are the first Pinterest pin for each search (Apify `automation-lab/pinterest-scraper`), tagged by Qwen3-VL.
 
-To make a fresh one (new user every run, about 3–5 min; Wikimedia rate-limits downloads):
+To make a fresh one (new user every run, about 2–4 min):
 ```bash
 uv run python -m backend.scripts.seed_test_user           # wardrobe, wishlist and inspirations
 uv run python -m backend.scripts.seed_test_user --taste   # ...and build the taste profile with Opus
 ```
 
+### Playground (Streamlit debug UI)
+
+Click through every endpoint as the test user: wardrobe and inspiration grids, daily outfit, taste profile, swipe deck, style library and trends, shopping recommendations, link checks, a raw-request console (any method or path, `{uid}` gets substituted, jobs are polled) and a log of every call.
+
+```bash
+uv run uvicorn backend.app.main:app --reload --port 8000        # backend first
+uv run --group playground streamlit run backend/playground/app.py
+```
+
+The sidebar picks the API (localhost or the public tunnel) and the `user_id`. It defaults to the test user from `backend/scripts/test_user.json`. Delete buttons stay disabled until you turn on **Allow deletes**. For destructive experiments, create a scratch user on the User page.
+
 ### Calling the API as the test user
 
 ```bash
 API=http://localhost:8000
-UID={{UID}}
+UID=24272756-ee74-40ac-81a8-2669e9a7bc69
 
 curl $API/users/$UID                                   # profile basics
 curl "$API/users/$UID/wardrobe"                        # owned items (signed image_url valid 1 h)
@@ -58,6 +100,9 @@ curl "$API/users/$UID/wardrobe?status=wanted"          # wishlist   (status=all 
 curl $API/users/$UID/inspirations                      # saved looks
 curl $API/users/$UID/taste-profile                     # latest Opus taste profile
 curl $API/users/$UID/taste-profile/evidence            # what the model sees (no LLM call)
+curl "$API/users/$UID/style-recommendations?n=5"       # style cards: coverage, missing pieces, reasons, trend
+curl "$API/style-library/trending?stage=rising"        # rising styles (Google Trends, weekly)
+curl $API/style-library                                # 43 styles grounded in Aesthetics Wiki (+ discovered)
 
 # daily outfit for the user's city (Prague), owned items only
 curl -X POST $API/users/$UID/outfits/daily -H 'Content-Type: application/json' -d '{"event":"office day"}'

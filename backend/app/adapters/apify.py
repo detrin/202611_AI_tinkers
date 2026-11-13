@@ -1,12 +1,12 @@
 """Apify-backed PinSource, ProductSource and SocialSource (Instagram). Normalisers are pure functions (unit-tested)."""
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from apify_client import ApifyClient
 
-from ..domain import Pin, Product, SocialPost
+from ..domain import Pin, Product, SocialPost, TrendSeries
 
-PINTEREST_ACTOR = "epctex/pinterest-scraper"
+PINTEREST_ACTOR = "automation-lab/pinterest-scraper"   # epctex/pinterest-scraper returns demo data on free plans
 ECOMMERCE_ACTOR = "apify/e-commerce-scraping-tool"
 INSTAGRAM_ACTOR = "apify/instagram-scraper"
 
@@ -25,8 +25,12 @@ class ApifyRunner:
 
 
 def to_pin(item: dict) -> Pin | None:
-    image = ((item.get("images") or {}).get("474x") or {}).get("url")
-    return Pin(url=item.get("url"), image_url=image, title=item.get("grid_title") or item.get("title")) if image else None
+    """automation-lab format (imageUrl, original size) or legacy epctex format (images.474x). Videos skipped."""
+    image = item.get("imageUrl") or ((item.get("images") or {}).get("474x") or {}).get("url")
+    if not image or item.get("isVideo"):
+        return None
+    return Pin(url=item.get("url"), image_url=image,
+               title=item.get("title") or item.get("grid_title") or (item.get("altText") or "")[:200] or None)
 
 
 def _price(value) -> float | None:
@@ -64,7 +68,7 @@ class ApifyPinSource:
         self._runner = runner
 
     def search(self, query: str, limit: int) -> list[Pin]:
-        items = self._runner.run(PINTEREST_ACTOR, {"search": query, "maxItems": limit, "getDetails": False, "endPage": 1})
+        items = self._runner.run(PINTEREST_ACTOR, {"searchQueries": [query], "maxPins": limit})
         return [p for p in map(to_pin, items) if p]
 
 
@@ -92,3 +96,28 @@ class ApifyInstagramSource:
         items = self._runner.run(INSTAGRAM_ACTOR, {"directUrls": [url], "resultsType": "posts",
                                                    "resultsLimit": limit, "addParentData": False})
         return [p for p in map(to_post, items) if p][:limit]
+
+
+GOOGLE_TRENDS_ACTOR = "apify/google-trends-scraper"
+
+
+def to_trend(item: dict) -> TrendSeries | None:
+    """Weekly interest timeline (12 months) + rising related queries ('Breakout' counted as 5000%)."""
+    term = item.get("searchTerm") or item.get("inputUrlOrTerm")
+    timeline = item.get("interestOverTime_timelineData") or []
+    if not term or not timeline:
+        return None
+    points = tuple((datetime.fromtimestamp(int(t["time"]), timezone.utc).date().isoformat(), int((t.get("value") or [0])[0]))
+                   for t in timeline if t.get("time"))
+    rising = tuple((q["query"], int(q.get("value") or 0)) for q in item.get("relatedQueries_rising") or [] if q.get("query"))
+    return TrendSeries(term=term, points=points, rising=rising)
+
+
+class ApifyTrendSource:
+    def __init__(self, runner: ApifyRunner):
+        self._runner = runner
+
+    def interest(self, terms: list[str], geo: str = "") -> list[TrendSeries]:
+        items = self._runner.run(GOOGLE_TRENDS_ACTOR, {"searchTerms": terms, "timeRange": "", "geo": geo,
+                                                       "maxItems": len(terms)})
+        return [t for t in map(to_trend, items) if t]
