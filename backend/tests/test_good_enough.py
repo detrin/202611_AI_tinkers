@@ -58,3 +58,15 @@ def test_validation(client, env):
     assert client.post(URL.format(uid)).status_code == 422          # no photo
     assert _post(client, uid, latitude="50").status_code == 422     # half a coordinate
     assert _post(client, uid, latitude="500", longitude="1").status_code == 422
+
+
+def test_points_are_title_detail_pairs_capped_at_three(client, env):
+    uid = env.user()["id"]
+    env.chat.answers["good_enough"] = {"good_enough": False, "explanation": "No.",
+                                       "fixes": ["Tuck it in", {"title": "Darker shoes", "detail": "Grounds it"},
+                                                 {"title": " "}, "a", "b"],
+                                       "highlights": "not a list"}
+    body = _post(client, uid).json()
+    assert body["fixes"] == [{"title": "Tuck it in", "detail": ""}, {"title": "Darker shoes", "detail": "Grounds it"},
+                             {"title": "a", "detail": ""}]
+    assert body["highlights"] == []

@@ -53,8 +53,8 @@ class GoodEnoughService:
         owned = {i["id"] for i in wardrobe}
         return {
             "verdict": YEAH if good else NAH, "good_enough": good, "score_1to10": judged.get("score_1to10"),
-            "explanation": judged.get("explanation") or "", "highlights": judged.get("highlights") or [],
-            "fixes": judged.get("fixes") or [], "weather_note": (judged.get("weather_note") or None) if weather else None,
+            "explanation": judged.get("explanation") or "", "highlights": _points(judged.get("highlights")),
+            "fixes": _points(judged.get("fixes")), "weather_note": (judged.get("weather_note") or None) if weather else None,
             "swap_item_ids": [i for i in judged.get("swap_item_ids") or [] if i in owned],
             "weather": weather, "location_source": location_source, "used_wardrobe": include_wardrobe,
         }
@@ -73,6 +73,17 @@ class GoodEnoughService:
     @staticmethod
     def _source(location: Location) -> str | None:
         return "coordinates" if location.has_coords else "city" if location.city else None
+
+
+def _points(value, limit: int = 3) -> list[Row]:
+    """[{title, detail}], at most `limit`. Models sometimes answer with plain strings: those become titles."""
+    out = []
+    for p in value if isinstance(value, list) else []:
+        if isinstance(p, dict) and (p.get("title") or "").strip():
+            out.append({"title": p["title"].strip(), "detail": (p.get("detail") or "").strip()})
+        elif isinstance(p, str) and p.strip():
+            out.append({"title": p.strip(), "detail": ""})
+    return out[:limit]
 
 
 def _as_bool(value) -> bool:

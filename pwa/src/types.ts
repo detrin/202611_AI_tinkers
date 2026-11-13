@@ -124,14 +124,19 @@ export interface Occasion {
   profile_id: string | null
 }
 
+export interface LookPoint {
+  title: string
+  detail: string
+}
+
 /** Answer of POST /users/{uid}/is-it-good-enough. */
 export interface LookVerdict {
   verdict: 'hell yeah' | 'hell nah'
   good_enough: boolean
   score_1to10: number | null
   explanation: string
-  highlights: string[]
-  fixes: string[]
+  highlights: LookPoint[]
+  fixes: LookPoint[]
   weather_note: string | null
   swap_item_ids: string[]
   /** Only when a location was sent. */

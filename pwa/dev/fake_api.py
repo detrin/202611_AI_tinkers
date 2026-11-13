@@ -90,19 +90,28 @@ class Chat(fakes.ScriptedChat):
 
     @staticmethod
     def look_verdict(prompt, images):
-        """Alternates hell yeah / hell nah on each check, so both can be seen."""
-        good = next(LOOK_TURNS)
+        """Alternates hell yeah / hell nah on each first check, so both can be seen. A closet re-check stays nah."""
         has_weather = '"weather": null' not in prompt
+        has_closet = '"wardrobe"' in prompt
+        good = False if has_closet else next(LOOK_TURNS)
         ids = re.findall(r'"id": "([0-9a-f-]{36})"', prompt)[:2]
-        return {
-            "good_enough": good, "score_1to10": 8 if good else 4,
-            "explanation": "Clean lines and the colours sit well together. The proportions work for a day out."
-            if good else "The top fights the trousers and the silhouette looks boxy. It reads more errand than occasion.",
-            "highlights": ["Trouser length is right", "Neutral palette"] if good else ["Shoes are a good choice"],
-            "fixes": [] if good else ["Tuck the top in at the front", "Swap to a darker trouser"],
-            "weather_note": ("Warm enough for 6°C, take a layer for the evening" if has_weather else ""),
-            "swap_item_ids": [] if good else ids,
-        }
+        if good:
+            return {"good_enough": True, "score_1to10": 8,
+                    "explanation": "Clean lines, and the colours sit well together.",
+                    "highlights": [{"title": "Trouser length is right", "detail": "A clean break over the shoes"},
+                                   {"title": "Calm palette", "detail": "Navy and beige never argue"}],
+                    "fixes": [], "weather_note": "Warm enough for 6°C" if has_weather else "", "swap_item_ids": []}
+        fixes = ([{"title": "Change into the oxford shirt", "detail": "Crisper than the top you have on"},
+                  {"title": "Swap to the crewneck knit", "detail": "Warmer, and navy calms the red"}]
+                 if has_closet else
+                 [{"title": "Tuck the top in at the front", "detail": "Shows the waist, less boxy"},
+                  {"title": "Darker trousers", "detail": "The green fights the red top"},
+                  {"title": "Add a layer", "detail": "It is 6°C and you will be cold"}])
+        return {"good_enough": False, "score_1to10": 4,
+                "explanation": "The top fights the trousers and the shape reads boxy.",
+                "highlights": [{"title": "Shoes work", "detail": "Simple and dark"}], "fixes": fixes,
+                "weather_note": "Cold for this, take a coat" if has_weather else "",
+                "swap_item_ids": ids if has_closet else []}
 
 
 class Weather(fakes.FakeWeather):

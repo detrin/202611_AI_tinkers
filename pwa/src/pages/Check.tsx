@@ -1,31 +1,32 @@
-import { ArrowRight, Camera, Check, CloudSun, ImagePlus, MapPin, Shirt, X } from 'lucide-react'
+import { Camera, CloudSun, ImagePlus, Share2, Shirt, X } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { track } from '../analytics'
 import { api } from '../api'
 import { errorText, itemName } from '../format'
-import type { Item, LookVerdict } from '../types'
+import type { Item, LookPoint, LookVerdict } from '../types'
 import { Notice } from '../ui'
 
 type Phase = 'pick' | 'checking' | 'result'
 
 const MIN_SCAN_MS = 1800
-
-const CHECKING_LINES = ['Looking at the fit', 'Reading the colours', 'Checking the proportions', 'Thinking about the weather', 'Making up my mind']
+const LOOK_LINES = ['Looking at the fit', 'Reading the colours', 'Checking the proportions', 'Thinking about the weather', 'Making up my mind']
+const CLOSET_LINES = ['Opening your closet', 'Trying pieces on', 'Picking the swap']
 
 /**
- * "Is it good enough?": a photo of the look you have on → hell yeah / hell nah, with the reasons.
- * Weather is used only when the phone shares its position (or the saved city as a fallback).
- * The closet is only compared when the user switches it on.
+ * "Is it good enough?": a photo of the look you have on → hell yeah / hell nah, and what to change.
+ * Weather comes from the phone's position (or the saved city when the phone says no).
+ * The closet is only read when the user asks for a swap after a hell nah.
  */
 export default function CheckLook({ occasion, onClose }: { occasion?: string; onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>('pick')
   const [photo, setPhoto] = useState<File | null>(null)
   const [preview, setPreview] = useState('')
-  const [useWeather, setUseWeather] = useState(true)
-  const [useCloset, setUseCloset] = useState(false)
   const [result, setResult] = useState<LookVerdict | null>(null)
+  const [withCloset, setWithCloset] = useState(false)
   const [error, setError] = useState('')
   const camera = useRef<HTMLInputElement>(null)
   const gallery = useRef<HTMLInputElement>(null)
+  const position = useRef<Promise<GeolocationCoordinates | null> | null>(null)
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
   useEffect(() => {
@@ -34,133 +35,204 @@ export default function CheckLook({ occasion, onClose }: { occasion?: string; on
     return () => { document.body.style.overflow = before }
   }, [])
 
+  async function check(file: File, closet: boolean) {
+    setPhase('checking')
+    setWithCloset(closet)
+    setError('')
+    try {
+      position.current ??= locate()
+      const [small, coords] = await Promise.all([shrink(file), position.current])
+      // The scan runs at least a moment even on a fast answer, so the verdict lands instead of flickering in.
+      const [verdict] = await Promise.all([
+        api.checkLook(small, { position: coords, useSavedCity: !coords, includeWardrobe: closet, occasion }),
+        new Promise((r) => setTimeout(r, MIN_SCAN_MS)),
+      ])
+      setResult(verdict)
+      setPhase('result')
+      navigator.vibrate?.(verdict.good_enough ? [20, 60, 20, 60, 40] : [90])
+      track('look_checked', { verdict: verdict.verdict, with_closet: closet, has_weather: !!verdict.weather })
+    } catch (e) {
+      setError(errorText(e))
+      setPhase(result ? 'result' : 'pick')
+    }
+  }
+
+  /** A new photo goes straight into the check: no settings to confirm first. */
   function choose(files: FileList | null) {
     const file = files?.[0]
     if (!file) return
     setPhoto(file)
     setPreview(URL.createObjectURL(file))
     setResult(null)
-    setError('')
-    setPhase('pick')
+    check(file, false)
   }
 
-  async function check() {
-    if (!photo) return
-    setPhase('checking')
-    setError('')
-    try {
-      const [small, position] = await Promise.all([shrink(photo), useWeather ? locate() : Promise.resolve(null)])
-      // The scan runs at least a moment even on a fast answer, so the verdict lands instead of flickering in.
-      const [verdict] = await Promise.all([
-        api.checkLook(small, { position, useSavedCity: useWeather && !position, includeWardrobe: useCloset, occasion }),
-        new Promise((r) => setTimeout(r, MIN_SCAN_MS)),
-      ])
-      setResult(verdict)
-      setPhase('result')
-      navigator.vibrate?.(verdict.good_enough ? [20, 60, 20, 60, 40] : [90])
-    } catch (e) {
-      setError(errorText(e))
-      setPhase('pick')
-    }
-  }
-
-  function again() {
-    setPhoto(null)
-    setPreview('')
-    setResult(null)
-    setPhase('pick')
-    camera.current?.click()
-  }
+  const tone = phase === 'result' && result ? (result.good_enough ? 'yeah' : 'nah') : ''
 
   return (
-    <div className="check" role="dialog" aria-label="Is it good enough?">
+    <div className={`check ${tone}`} role="dialog" aria-label="Is it good enough?">
+      {tone && <i className="flood" key={`${tone}-${withCloset}`} />}
+
       <header className="check-head">
-        <div>
-          <p className="eyebrow">Before you leave</p>
-          <h1>Is it good enough?</h1>
-        </div>
+        <p className="eyebrow">Is it good enough?</p>
         <button className="icon-btn" onClick={onClose} aria-label="Close">
           <X size={22} />
         </button>
       </header>
 
-      <input ref={camera} type="file" accept="image/*" capture="user" hidden onChange={(e) => choose(e.target.files)} />
+      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={(e) => choose(e.target.files)} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={(e) => choose(e.target.files)} />
 
-      {!preview && (
-        <button className="snap" onClick={() => camera.current?.click()}>
-          <span className="snap-ring">
-            <Camera size={34} strokeWidth={1.5} />
-          </span>
-          <strong>Take a mirror photo</strong>
-          <span>Head to toe works best</span>
+      {!preview ? (
+        <>
+          <button className="snap" onClick={() => camera.current?.click()}>
+            <span className="snap-ring">
+              <Camera size={34} strokeWidth={1.5} />
+            </span>
+            <strong>Take a mirror photo</strong>
+            <span>Head to toe works best</span>
+          </button>
+          <button className="btn" onClick={() => gallery.current?.click()}>
+            <ImagePlus size={18} /> Choose from photos
+          </button>
+          <p className="hint">Weather comes from where you are. Your closet is only used if you ask for a swap.</p>
+        </>
+      ) : (
+        <Card src={preview} scanning={phase === 'checking'} verdict={phase === 'result' ? result : null} />
+      )}
+
+      {phase === 'checking' && <Ticker lines={withCloset ? CLOSET_LINES : LOOK_LINES} />}
+      {error && <Notice kind="error">{error}</Notice>}
+      {phase === 'pick' && preview && (
+        <button className="btn primary big" onClick={() => photo && check(photo, false)}>
+          Try again
         </button>
       )}
 
-      {preview && (
-        <Frame
-          src={preview}
-          scanning={phase === 'checking'}
-          verdict={phase === 'result' ? result : null}
-          onRetake={phase === 'pick' ? () => camera.current?.click() : undefined}
+      {phase === 'result' && result && photo && (
+        <Verdict
+          key={`${result.verdict}-${withCloset}`}
+          verdict={result}
+          photo={photo}
+          onSwap={() => check(photo, true)}
+          onRetake={() => camera.current?.click()}
+          onDone={onClose}
         />
       )}
-
-      {phase === 'checking' && <Ticker lines={CHECKING_LINES} />}
-      {error && <Notice kind="error">{error}</Notice>}
-
-      {phase === 'pick' && (
-        <>
-          <div className="toggles">
-            <Toggle icon={MapPin} label="Weather where I am" hint="Uses your position, or your city" on={useWeather} onChange={setUseWeather} />
-            <Toggle icon={Shirt} label="Compare with my closet" hint="Suggests swaps from what you own" on={useCloset} onChange={setUseCloset} />
-          </div>
-          {preview ? (
-            <button className="btn primary big" onClick={check}>
-              Is it good enough?
-            </button>
-          ) : (
-            <button className="btn" onClick={() => gallery.current?.click()}>
-              <ImagePlus size={18} /> Choose from photos
-            </button>
-          )}
-        </>
-      )}
-
-      {phase === 'result' && result && <Reasons verdict={result} onAgain={again} onDone={onClose} />}
     </div>
   )
 }
 
-function Frame({ src, scanning, verdict, onRetake }: { src: string; scanning: boolean; verdict: LookVerdict | null; onRetake?: () => void }) {
-  const tone = verdict ? (verdict.good_enough ? 'yeah' : 'nah') : ''
+function Card({ src, scanning, verdict }: { src: string; scanning: boolean; verdict: LookVerdict | null }) {
   return (
-    <div className={`frame ${scanning ? 'scanning' : ''} ${tone}`}>
-      <img src={src} alt="Your look" />
-      {scanning && (
-        <>
-          <i className="scanline" />
-          <i className="corner tl" />
-          <i className="corner tr" />
-          <i className="corner bl" />
-          <i className="corner br" />
-        </>
-      )}
+    <div className={`look-card ${scanning ? 'scanning' : ''}`}>
+      <div className="look-photo">
+        <img src={src} alt="Your look" />
+        {scanning && (
+          <>
+            <i className="scanline" />
+            <i className="corner tl" />
+            <i className="corner tr" />
+            <i className="corner bl" />
+            <i className="corner br" />
+          </>
+        )}
+      </div>
       {verdict && (
         <>
-          <i className="shock" />
           {verdict.good_enough && <Confetti />}
-          <div className="verdict-stamp" aria-live="polite">
-            {verdict.good_enough ? 'Hell yeah' : 'Hell nah'}
-          </div>
+          <span className="sticker" aria-hidden>
+            {verdict.good_enough ? 'Yeah' : 'Nah'}
+          </span>
         </>
       )}
-      {onRetake && (
-        <button className="retake" onClick={onRetake}>
-          <Camera size={16} /> Retake
-        </button>
-      )}
     </div>
+  )
+}
+
+function Verdict({ verdict, photo, onSwap, onRetake, onDone }: {
+  verdict: LookVerdict; photo: File; onSwap: () => void; onRetake: () => void; onDone: () => void
+}) {
+  const good = verdict.good_enough
+  const points = good ? verdict.highlights : verdict.fixes
+  const swaps = useSwaps(verdict.swap_item_ids)
+  const temp = verdict.weather?.current?.temperature_2m
+  const place = verdict.weather?.city
+  const weather = [temp != null ? `${Math.round(temp)}°C${place ? ` in ${place}` : ''}` : '', verdict.weather_note].filter(Boolean).join(' · ')
+  const canShare = good && typeof navigator.canShare === 'function'
+  let n = 0
+  const step = () => ({ '--i': n++ }) as CSSProperties
+
+  return (
+    <section className="verdict">
+      <div className="verdict-head" style={step()}>
+        <h1>{good ? 'Hell yeah' : 'Hell nah'}</h1>
+        {verdict.explanation && <p>{verdict.explanation}</p>}
+        {weather && (
+          <small>
+            <CloudSun size={15} /> {weather}
+          </small>
+        )}
+      </div>
+
+      {points.length > 0 && (
+        <div className="moves">
+          <h2 style={step()}>{good ? 'Why it works' : verdict.used_wardrobe ? 'From your closet' : 'Fix it'}</h2>
+          {points.map((p: LookPoint, i) => (
+            <div className="move" key={p.title} style={step()}>
+              <b>{i + 1}</b>
+              <span>
+                <strong>{p.title}</strong>
+                {p.detail && <small>{p.detail}</small>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {swaps.length > 0 && (
+        <div className="swap-row" style={step()}>
+          {swaps.map((item) => (
+            <figure key={item.id}>
+              <div className="photo">{item.image_url ? <img src={item.image_url} alt={itemName(item)} /> : <span>{itemName(item)}</span>}</div>
+              <figcaption>{itemName(item)}</figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+
+      <div className="actions" style={step()}>
+        {good ? (
+          <>
+            <button className="btn primary" onClick={onDone}>Wear it</button>
+            {canShare ? (
+              <button className="btn" onClick={() => shareVerdict(photo)}>
+                <Share2 size={18} /> Share
+              </button>
+            ) : (
+              <button className="btn" onClick={onRetake}>
+                <Camera size={18} /> Check another
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {verdict.used_wardrobe ? (
+              <button className="btn primary" onClick={onRetake}>
+                <Camera size={18} /> Retake
+              </button>
+            ) : (
+              <button className="btn primary" onClick={onSwap}>
+                <Shirt size={18} /> Find a swap
+              </button>
+            )}
+            <button className="btn" onClick={verdict.used_wardrobe ? onDone : onRetake}>
+              {verdict.used_wardrobe ? 'Done' : 'Retake'}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -184,106 +256,6 @@ function Confetti() {
   )
 }
 
-function Reasons({ verdict, onAgain, onDone }: { verdict: LookVerdict; onAgain: () => void; onDone: () => void }) {
-  const score = useCountUp(verdict.score_1to10 ?? 0, 900, 450)
-  const swaps = useSwaps(verdict.swap_item_ids)
-  const w = verdict.weather
-  const temp = w?.current?.temperature_2m
-  let n = 0
-  const step = () => ({ '--i': n++ }) as CSSProperties
-
-  return (
-    <section className={`reasons ${verdict.good_enough ? 'yeah' : 'nah'}`}>
-      <div className="score-row" style={step()}>
-        {verdict.score_1to10 != null && (
-          <div className="score" style={{ '--p': (verdict.score_1to10 / 10).toFixed(2) } as CSSProperties}>
-            <svg viewBox="0 0 64 64" aria-hidden>
-              <circle cx="32" cy="32" r="28" />
-              <circle cx="32" cy="32" r="28" className="arc" />
-            </svg>
-            <b>{score}</b>
-          </div>
-        )}
-        <p className="explanation">{verdict.explanation}</p>
-      </div>
-
-      {(w || verdict.weather_note) && (
-        <p className="weather-chip" style={step()}>
-          <CloudSun size={18} />
-          <span>
-            {temp != null && `${Math.round(temp)}°C${w?.city ? ` in ${w.city}` : ' where you are'}`}
-            {temp != null && verdict.weather_note && ' · '}
-            {verdict.weather_note}
-          </span>
-        </p>
-      )}
-
-      {verdict.highlights.length > 0 && (
-        <ul className="points good">
-          {verdict.highlights.map((h) => (
-            <li key={h} style={step()}>
-              <Check size={18} />
-              <span>{h}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {verdict.fixes.length > 0 && (
-        <>
-          <h3 style={step()}>{verdict.good_enough ? 'To make it even better' : 'What would fix it'}</h3>
-          <ul className="points fix">
-            {verdict.fixes.map((f) => (
-              <li key={f} style={step()}>
-                <ArrowRight size={18} />
-                <span>{f}</span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
-      {swaps.length > 0 && (
-        <div className="swaps" style={step()}>
-          <h3>Swap in from your closet</h3>
-          <div className="swap-row">
-            {swaps.map((item) => (
-              <figure key={item.id}>
-                <div className="photo">{item.image_url ? <img src={item.image_url} alt={itemName(item)} /> : <span>{itemName(item)}</span>}</div>
-                <figcaption>{itemName(item)}</figcaption>
-              </figure>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="actions" style={step()}>
-        <button className="btn primary" onClick={onAgain}>
-          <Camera size={18} /> Check another
-        </button>
-        <button className="btn" onClick={onDone}>
-          Done
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function Toggle({ icon: Icon, label, hint, on, onChange }: {
-  icon: typeof MapPin; label: string; hint: string; on: boolean; onChange: (v: boolean) => void
-}) {
-  return (
-    <label className="toggle">
-      <Icon size={20} />
-      <span>
-        <strong>{label}</strong>
-        <small>{hint}</small>
-      </span>
-      <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} />
-    </label>
-  )
-}
-
 function Ticker({ lines }: { lines: string[] }) {
   const [i, setI] = useState(0)
   useEffect(() => {
@@ -295,23 +267,6 @@ function Ticker({ lines }: { lines: string[] }) {
       <span key={i}>{lines[i]}…</span>
     </p>
   )
-}
-
-function useCountUp(target: number, ms: number, delay: number) {
-  const [v, setV] = useState(0)
-  useEffect(() => {
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return setV(target)
-    let raf = 0
-    const start = performance.now() + delay
-    const tick = (now: number) => {
-      const t = Math.min(1, Math.max(0, (now - start) / ms))
-      setV(Math.round(target * (1 - (1 - t) ** 3)))
-      if (t < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, ms, delay])
-  return v
 }
 
 function useSwaps(ids: string[]) {
@@ -327,6 +282,47 @@ function useSwaps(ids: string[]) {
       .catch(() => setItems([]))
   }, [key])
   return items
+}
+
+/** The photo with the green YEAH sticker on it, through the phone's share sheet. */
+async function shareVerdict(photo: File) {
+  try {
+    const bitmap = await createImageBitmap(photo)
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    const ctx = canvas.getContext('2d')!
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    const size = Math.round(canvas.width * 0.12)
+    ctx.font = `800 ${size}px Inter, system-ui, sans-serif`
+    const label = 'HELL YEAH'
+    const w = ctx.measureText(label).width + size
+    const h = size * 1.5
+    ctx.translate(canvas.width - w / 2 - size * 0.5, canvas.height - h / 2 - size * 0.6)
+    ctx.rotate((8 * Math.PI) / 180)
+    ctx.fillStyle = '#ffffff'
+    ctx.strokeStyle = '#2f8f5b'
+    ctx.lineWidth = size * 0.12
+    ctx.beginPath()
+    ctx.roundRect(-w / 2, -h / 2, w, h, size * 0.35)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#2f8f5b'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(label, 0, size * 0.05)
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/jpeg', 0.9))
+    if (!blob) return
+    const file = new File([blob], 'hell-yeah.jpg', { type: 'image/jpeg' })
+    const data = { files: [file], text: 'Hell yeah. Good enough to go.' }
+    if (navigator.canShare?.(data)) {
+      await navigator.share(data)
+      track('look_shared')
+    }
+  } catch {
+    /* share sheet dismissed */
+  }
 }
 
 /** Position for the weather, or null if the phone says no or takes too long (then the saved city is used). */

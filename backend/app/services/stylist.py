@@ -76,10 +76,16 @@ Decide: is this look good enough to go out in? Judge fit, proportions, colour ha
 occasion, and (only if weather is given) whether it works for the weather. Use the context below as data.
 {context}
 If weather is null, do not mention or guess the weather. Only reference wardrobe item ids that appear in the context.
+If a wardrobe is given and the look is not good enough, you MUST pick 1-3 owned pieces from it to change into:
+each fix names one of them plainly (e.g. "Change into the grey crewneck"), and swap_item_ids lists their ids.
+Write like a friend texting: short, specific, plain words, no exclamation marks. It is read on a phone.
 Return ONLY JSON:
-{{"good_enough":true,"score_1to10":0,"explanation":"2-3 sentences, direct and specific",
-  "highlights":["what works"],"fixes":["concrete changes, empty if none"],"weather_note":"",
-  "swap_item_ids":["wardrobe ids to swap in, only if a wardrobe is given"]}}"""
+{{"good_enough":true,"score_1to10":0,"explanation":"ONE sentence, at most 20 words",
+  "highlights":[{{"title":"what works, at most 6 words","detail":"why, at most 10 words"}}],
+  "fixes":[{{"title":"one change to make, an action, at most 8 words","detail":"why or with what, at most 10 words"}}],
+  "weather_note":"at most 15 words, empty if no weather",
+  "swap_item_ids":["wardrobe ids to swap in, only if a wardrobe is given"]}}
+At most 3 highlights and at most 3 fixes. fixes is empty when nothing needs changing."""
 
 def parse_json(text: str):
     text = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.M).strip()
