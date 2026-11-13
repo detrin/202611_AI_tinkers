@@ -5,6 +5,7 @@ import SettingsPage from './pages/Settings'
 import Style from './pages/Style'
 import Today from './pages/Today'
 import ShareInbox from './share'
+import { warmDeck } from './pages/Swipe'
 import { getSettings } from './store'
 
 type Tab = 'today' | 'closet' | 'style' | 'settings'
@@ -17,6 +18,10 @@ const TABS = [
 ] as const
 
 export default function App() {
+  // Load the swipe deck in the background so the screen opens with cards already there.
+  useEffect(() => {
+    if (getSettings().userId) warmDeck()
+  }, [])
   const [tab, setTab] = useState<Tab>(getSettings().userId ? 'today' : 'settings')
   const [shared, setShared] = useState(() => new URLSearchParams(location.search).has('shared'))
   // Bumped when data changes on another tab's behalf, so lists reload when shown again.
