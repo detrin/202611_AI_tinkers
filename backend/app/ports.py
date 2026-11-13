@@ -25,6 +25,7 @@ class ChatModel(Protocol):
 class ImageStore(Protocol):
     def put(self, path: str, content: bytes, mime: str) -> None: ...
     def signed_url(self, path: str) -> str | None: ...
+    # optional: def signed_urls(self, paths: list[str]) -> dict[str, str | None]  (one request for many)
 
 
 class ImageFetcher(Protocol):

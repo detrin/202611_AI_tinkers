@@ -27,28 +27,40 @@ Secrets are read from env vars first, then the macOS Keychain:
 
 ## Public URL
 
-The API is live at **https://goodenough.hermandaniel.com/api**. Swagger UI: https://goodenough.hermandaniel.com/api/docs
+The app is live at **https://goodenough.hermandaniel.com** (the PWA) and the API at **https://goodenough.hermandaniel.com/api**. Swagger UI: https://goodenough.hermandaniel.com/api/docs
 
 ```bash
 curl https://goodenough.hermandaniel.com/api/health   # {"ok":true}
 API=https://goodenough.hermandaniel.com/api          # use instead of http://localhost:8000 in the examples below
 ```
 
-How it is wired:
-- A Cloudflare Tunnel (`goodenough`) runs on Daniel's Mac and forwards `/api/...` to `127.0.0.1:8000`. The tunnel can't rewrite paths, so the server runs `backend.app.public:app`. That entrypoint serves the same app under `/api` (and still under `/` for local use).
-- Everything outside `/api` returns 404 for now. The site will take over `/` later, as a second tunnel rule (or a separate host), and the frontend then calls `/api` on the same origin, so no CORS setup is needed.
-- It is only up while that Mac is awake. It runs on the Mac because it needs the Keychain secrets and the `claude` login.
+How it is wired. Everything runs on Daniel's Mac behind one Cloudflare Tunnel (`goodenough`):
+
+| Path | Goes to | Runs from |
+|---|---|---|
+| `/api/...` | FastAPI `backend.app.public:app` on `127.0.0.1:8000` | the repo checkout (restart to pick up changes) |
+| everything else | the PWA: `vite preview` of the production build on `:4173` | a separate worktree pinned to `origin/main`: `../goodenough-deploy` |
+| `/cutout` | via the PWA server to `pwa/cutout/server.py` on `127.0.0.1:8010` | the repo checkout |
+
+- The tunnel can't rewrite paths, so the API runs `backend.app.public:app`, which serves the same app under `/api` (and still under `/` for local use).
+- The PWA calls `/api` on the same origin, so no CORS setup is needed. It is built from `origin/main` only, so half-finished edits in someone's checkout never break the live site.
+- `POST /outfits/today` is not enabled (no `TODAY_API_TOKEN`); the Today page falls back to `/outfits/daily`.
+- It is only up while that Mac is awake. It runs there because it needs the Keychain secrets and the `claude` login.
 - There is no authentication yet, so don't post the URL publicly. Anyone with it can create users and start paid scraping and LLM jobs.
 
 Operating it (on the Mac):
 ```bash
+# deploy the PWA: move the worktree to the latest main, then restart (it runs npm ci + build on start)
+git -C ../goodenough-deploy fetch && git -C ../goodenough-deploy checkout --detach origin/main
+launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-web
 launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-api      # restart the API, e.g. after git pull
+launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-cutout   # restart the cutout service
 launchctl kickstart -k gui/$(id -u)/com.hermandaniel.goodenough-tunnel   # restart the tunnel
-tail -f ~/Library/Logs/goodenough-api.log ~/Library/Logs/goodenough-tunnel.log
-# config: ~/Library/LaunchAgents/com.hermandaniel.goodenough-{api,tunnel}.plist, ~/.cloudflared/goodenough.yml
+tail -f ~/Library/Logs/goodenough-{api,web,cutout,tunnel}.log
+# config: ~/Library/LaunchAgents/com.hermandaniel.goodenough-*.plist, ~/.cloudflared/goodenough.yml
 ```
 
-To run the same entrypoint locally: `uv run uvicorn backend.app.public:app --port 8000` (then both `/api/health` and `/health` work).
+To run the same API entrypoint locally: `uv run uvicorn backend.app.public:app --port 8000` (then both `/api/health` and `/health` work).
 
 ## Demo user (for the live demo)
 

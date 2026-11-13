@@ -1,4 +1,5 @@
 """Supabase implementations of Database and ImageStore."""
+import httpx
 from supabase import Client
 
 from ..ports import Row
@@ -48,5 +49,23 @@ class SupabaseImageStore:
         self._bucket.upload(path, content, {"content-type": mime})
 
     def signed_url(self, path: str) -> str | None:
-        r = self._bucket.create_signed_url(path, self._ttl)
+        r = _retry(lambda: self._bucket.create_signed_url(path, self._ttl))
         return r.get("signedURL") or r.get("signedUrl") or r.get("signed_url")
+
+    def signed_urls(self, paths: list[str]) -> dict[str, str | None]:
+        """One Storage request for many paths (a 74-item closet was 74 sequential requests, ~17 s)."""
+        if not paths:
+            return {}
+        rows = _retry(lambda: self._bucket.create_signed_urls(paths, self._ttl))
+        return {r["path"]: (None if r.get("error") else r.get("signedURL") or r.get("signedUrl")) for r in rows}
+
+
+def _retry(call, attempts: int = 2):
+    """Storage keeps idle keep-alive connections that the server sometimes drops ("Server disconnected");
+    the next attempt opens a fresh one."""
+    for i in range(attempts):
+        try:
+            return call()
+        except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadError):
+            if i == attempts - 1:
+                raise

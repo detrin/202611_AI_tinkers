@@ -26,7 +26,14 @@ class ImageService:
     def with_urls(self, rows: list[Row]) -> list[Row]:
         ids = [r["image_id"] for r in rows if r.get("image_id")]
         paths = {i["id"]: i["bucket_path"] for i in self._db.select("images", in_={"id": ids})} if ids else {}
-        return [{**r, "image_url": self._signed(paths.get(r.get("image_id"))) or r.get("source_url")} for r in rows]
+        urls = self._sign_all([p for p in dict.fromkeys(paths.values()) if p])
+        return [{**r, "image_url": urls.get(paths.get(r.get("image_id"))) or r.get("source_url")} for r in rows]
+
+    def _sign_all(self, paths: list[str]) -> dict[str, str | None]:
+        """Batch-sign when the store supports it (one request), else one by one."""
+        if batch := getattr(self._store, "signed_urls", None):
+            return batch(paths)
+        return {p: self._store.signed_url(p) for p in paths}
 
     def _signed(self, path: str | None) -> str | None:
         return self._store.signed_url(path) if path else None
