@@ -375,11 +375,18 @@ def page_taste():
 
 
 def page_styles():
-    t1, t2, t3, t4 = st.tabs(["Swipe deck", "Pinterest styles", "Style library & trends", "Style recs"])
+    t1, t2, t3, t4, t5, t6 = st.tabs(["Swipe deck", "Style beliefs", "Boards", "Pinterest styles",
+                                      "Style library & trends", "Style recs"])
     with t1:
         if need_user():
             swipe_deck()
     with t2:
+        if need_user():
+            style_beliefs()
+    with t3:
+        if need_user():
+            swipe_boards()
+    with t4:
         s, styles = api().get("/styles")
         if ok(s, styles):
             names = {f"{x.get('name')} ({x.get('id', '')[:8]})": x["id"] for x in styles}
@@ -390,15 +397,21 @@ def page_styles():
                     st.write(st_.get("summary") or st_.get("description"))
                     grid(st_.get("pins") or [], lambda p: image(p.get("image_url"), caption=p.get("title")), 6)
                     raw(st_)
-        with st.form("refresh_styles"):
+        c1, c2 = st.columns(2)
+        with c1, st.form("refresh_styles"):
             q = st.text_input("queries (comma)", "old money outfit, gorpcore outfit")
             n = st.number_input("pins_per_style", 1, 50, 12)
             if st.form_submit_button("Refresh styles (Apify job, 1–3 min)"):
                 run_job(*api().post("/styles/refresh", json={"queries": [x.strip() for x in q.split(",") if x.strip()],
                                                              "pins_per_style": n}))
-    with t3:
+        with c2, st.form("fill_pins"):
+            per = st.number_input("per_style", 1, 50, 12)
+            only_missing = st.checkbox("only_missing", value=True)
+            if st.form_submit_button("Fill pins for library styles (paid Apify job)"):
+                run_job(*api().post("/styles/pins/fill", json={"per_style": per, "only_missing": only_missing}))
+    with t5:
         style_library()
-    with t4:
+    with t6:
         if need_user():
             n = st.slider("n", 1, 15, 5)
             s, recs = api().get(f"{U}/style-recommendations", params={"n": n})
@@ -415,27 +428,72 @@ def page_styles():
                         if c2.button("👎", key=f"sn_{sid}"):
                             ok(*api().post(f"{U}/style-recommendations/{sid}/feedback", json={"interested": False}))
                 raw(recs)
+            st.divider()
+            st.subheader("Next styles (pins tuned for the recommendation page)")
+            st.caption("⚠️ Pins served here are marked seen for this user and won't come back.")
+            c1, c2 = st.columns(2)
+            k = c1.slider("k", 1, 20, 6)
+            ex = c2.slider("explore ", 0.0, 1.0, 0.2, 0.05)
+            if st.button("Deal next styles"):
+                s, nxt = api().get(f"{U}/next-styles", params={"k": k, "explore": ex})
+                if ok(s, nxt):
+                    st.session_state.next_styles = nxt
+            nxt = st.session_state.get("next_styles") or []
+            grid(nxt, lambda p: pin_card(p, source="recommendations"), 6)
+
+
+def pin_meta(pin):
+    mode = pin.get("mode")
+    badge = {"explore": "🧭 explore", "exploit": "🎯 exploit"}.get(mode, mode or "")
+    st.markdown(f"**{pin.get('style_name') or pin.get('style_id')}** · {badge}")
+    bits = [f"p_like {pin['p_like']:.2f}" if isinstance(pin.get("p_like"), (int, float)) else None,
+            f"± {pin['uncertainty']:.2f}" if isinstance(pin.get("uncertainty"), (int, float)) else None]
+    if any(bits):
+        st.caption(" ".join(b for b in bits if b))
+    if pin.get("reason"):
+        st.caption(pin["reason"])
+
+
+def pin_card(pin, source="deck"):
+    image(pin.get("image_url"))
+    pin_meta(pin)
+    c1, c2 = st.columns(2)
+    if c1.button("👍", key=f"pl_{source}_{pin['id']}"):
+        ok(*api().post(f"{U}/swipes", json=[{"pin_id": pin["id"], "liked": True, "source": source}]))
+    if c2.button("👎", key=f"pd_{source}_{pin['id']}"):
+        ok(*api().post(f"{U}/swipes", json=[{"pin_id": pin["id"], "liked": False, "source": source}]))
 
 
 def swipe_deck():
-    if "deck" not in st.session_state or st.button("New deck"):
-        s, deck = api().get(f"{U}/swipe-deck", params={"n": 20})
-        st.session_state.deck = deck if ok(s, deck) else []
-    deck = st.session_state.deck
+    st.caption("⚠️ Every pin the deck serves is marked seen for this user and is never served again. "
+               "On the shared test user that uses up its deck for everyone, so deal small batches or use a scratch user.")
+    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+    explore = c1.slider("explore (share of slots spent learning taste)", 0.0, 1.0, 0.5, 0.05)
+    n = c2.number_input("n", 1, 100, 8)
+    seed = c3.text_input("seed (optional)")
+    c4.write("")
+    if c4.button("Deal pins", type="primary", use_container_width=True):
+        params = {"n": n, "explore": explore, **({"seed": int(seed)} if seed.strip().isdigit() else {})}
+        s, deck = api().get(f"{U}/swipe-deck", params=params)
+        st.session_state.deck = {"uid": uid, "pins": deck if ok(s, deck) else []}
+    state = st.session_state.get("deck")
+    deck = state["pins"] if state and state.get("uid") == uid else []
     if not deck:
-        st.info("Deck empty (no unseen pins — run a styles refresh).")
+        st.info("No pins dealt yet. Press **Deal pins**. An empty result means no unseen pins are left (fill pins on the Pinterest styles tab).")
         return
     pin = deck[0]
     c1, c2 = st.columns([2, 3])
     with c1:
         image(pin.get("image_url"))
     with c2:
-        st.markdown(f"**{pin.get('style_name') or pin.get('style_id')}**  \n{pin.get('title') or ''}")
-        st.caption(f"{len(deck)} left in deck")
+        pin_meta(pin)
+        st.write(pin.get("title") or "")
+        modes = [p.get("mode") for p in deck]
+        st.caption(f"{len(deck)} left in this batch · {modes.count('explore')} explore / {modes.count('exploit')} exploit")
         b1, b2, b3 = st.columns(3)
         for col, label, liked in ((b1, "👎 nope", False), (b2, "👍 like", True)):
             if col.button(label, use_container_width=True):
-                ok(*api().post(f"{U}/swipes", json=[{"pin_id": pin["id"], "liked": liked}]))
+                ok(*api().post(f"{U}/swipes", json=[{"pin_id": pin["id"], "liked": liked, "source": "deck"}]))
                 deck.pop(0)
                 st.rerun()
         if b3.button("⭐ save as inspiration", use_container_width=True):
@@ -443,6 +501,38 @@ def swipe_deck():
             deck.pop(0)
             st.rerun()
         raw(pin, "pin")
+
+
+def style_beliefs():
+    s, beliefs = api().get(f"{U}/style-beliefs")
+    if not ok(s, beliefs):
+        return
+    st.caption("The model's per-style belief that this user likes it. The prior comes from the evidence listed in prior_from; swipes update it.")
+    rows = [{"style": b.get("name"), "p_like": b.get("p_like"), "uncertainty": b.get("uncertainty"),
+             "likes": b.get("likes"), "dislikes": b.get("dislikes"), "prior": b.get("prior"),
+             "unseen_pins": b.get("unseen_pins"), "prior_from": ", ".join(b.get("prior_from") or [])} for b in beliefs]
+    st.dataframe(rows, use_container_width=True, hide_index=True, column_config={
+        "p_like": st.column_config.ProgressColumn("p_like", min_value=0, max_value=1, format="%.2f"),
+        "prior": st.column_config.ProgressColumn("prior", min_value=0, max_value=1, format="%.2f"),
+        "uncertainty": st.column_config.NumberColumn(format="%.3f")})
+    raw(beliefs)
+
+
+def swipe_boards():
+    which = st.segmented_control("board", ["interested", "not interested", "all"], default="interested") or "interested"
+    params = {"interested": {"liked": "true"}, "not interested": {"liked": "false"}}.get(which, {})
+    s, board = api().get(f"{U}/swipes", params=params)
+    if not ok(s, board):
+        return
+    st.caption(f"{len(board)} swipes")
+
+    def card(r):
+        image(r.get("image_url"))
+        st.markdown(f"{'👍' if r.get('liked') else '👎'} **{r.get('style_name') or ''}**")
+        st.caption(f"{r.get('mode') or ''} · {r.get('source') or ''} · {(r.get('created_at') or '')[:16]}")
+
+    grid(board, card, 6)
+    raw(board)
 
 
 def style_library():
