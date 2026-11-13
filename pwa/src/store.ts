@@ -74,7 +74,7 @@ export interface Plan {
 
 /** Demo plans stored in the app itself. They are not read from a calendar service. */
 export const PLANS: Plan[] = [
-  { day: 0, time: '19:30', title: 'AI Agents for the Rest of Us: hackathon demos and winners (AI Tinkerers Prague)', location: 'Prague' },
+  { day: 0, time: '19:30', title: 'AI Agents for the Rest of Us: Apify hackathon demos and winners (AI Tinkerers Prague)', location: 'Prague' },
   { day: 0, time: '21:00', title: 'Dinner with the team after the hackathon', location: 'Restaurant, Prague Old Town' },
   { day: 1, time: '10:00', title: 'Brunch with friends', location: 'Café, Vinohrady' },
   { day: 1, time: '14:00', title: 'Client meeting', location: 'Office, Karlín' },
