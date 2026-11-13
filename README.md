@@ -71,6 +71,17 @@ uv run python -m backend.scripts.seed_test_user           # wardrobe, wishlist a
 uv run python -m backend.scripts.seed_test_user --taste   # ...and build the taste profile with Opus
 ```
 
+### Playground (Streamlit debug UI)
+
+Click through every endpoint as the test user: wardrobe and inspiration grids, daily outfit, taste profile, swipe deck, style library and trends, shopping recommendations, link checks, a raw-request console (any method or path, `{uid}` gets substituted, jobs are polled) and a log of every call.
+
+```bash
+uv run uvicorn backend.app.main:app --reload --port 8000        # backend first
+uv run --group playground streamlit run backend/playground/app.py
+```
+
+The sidebar picks the API (localhost or the public tunnel) and the `user_id`. It defaults to the test user from `backend/scripts/test_user.json`. Delete buttons stay disabled until you turn on **Allow deletes**. For destructive experiments, create a scratch user on the User page.
+
 ### Calling the API as the test user
 
 ```bash
