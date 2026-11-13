@@ -28,15 +28,18 @@ You can override the models with `VISION_MODEL` (default `Qwen/Qwen3-VL-30B-A3B-
 backend/app/
   config.py        Settings + secret loading (env → Keychain)
   errors.py        NotFound / Conflict / Invalid → 404 / 409 / 422
-  domain.py        value objects: ImageInput, Pin, Product
+  domain.py        value objects: ImageInput, Pin, Product, SocialPost
   ports.py         Protocols: Database, ChatModel, ImageStore, ImageFetcher, PinSource, ProductSource,
-                   WeatherProvider, Executor
-  adapters/        concrete I/O: supabase.py, featherless.py, apify.py, web.py (HTTP fetch + Open-Meteo), executors.py
+                   SocialSource, WeatherProvider, Executor
+  adapters/        concrete I/O: supabase.py, featherless.py, apify.py (Pinterest, e-commerce, Instagram),
+                   html.py (JSON-LD/OpenGraph product pages + Apify fallback), web.py (HTTP fetch + Open-Meteo), executors.py
   services/        business logic, depends only on ports
     stylist.py       every prompt + JSON parsing (the only LLM-aware module)
     images.py        upload/URL → Storage + `images` row, signed URLs
     users.py         users + selfie colour analysis
-    wardrobe.py      tag + store items
+    wardrobe.py      single garments, owned or wanted
+    inspirations.py  whole looks (upload / URL / pin)
+    imports.py       URL imports: product page → item, Instagram → style profile (+ items)
     styles.py        Pinterest style library
     preferences.py   swipe deck + signals
     profiles.py      style profile
@@ -57,7 +60,7 @@ To swap a provider (for example another LLM or a different scraper), write a new
 
 ### Tests
 ```bash
-uv run pytest          # 46 unit tests, ~0.5 s, all fakes (tests/fakes.py)
+uv run pytest          # 60 unit tests, ~0.5 s, all fakes (tests/fakes.py)
 ```
 
 `create_app(lambda: build_services(...fakes...))` gives a fully working API in memory, which is useful in notebooks too.
@@ -75,7 +78,8 @@ uv run pytest          # 46 unit tests, ~0.5 s, all fakes (tests/fakes.py)
 |---|---|---|
 | `users` | id, name, city, budget, currency, fit_prefs jsonb, sizes jsonb, color_profile jsonb | `color_profile` comes from the selfie analysis |
 | `images` | id, user_id, bucket_path, source_url, kind (wardrobe/selfie/pin/product) | Storage index |
-| `wardrobe_items` | id, user_id, image_id, category, subtype, colors[], pattern, material, formality 1-5, warmth 1-5, style_tags[], raw jsonb | tagged by the vision model |
+| `wardrobe_items` | id, user_id, image_id, **status (owned/wanted)**, **product_id**, category, subtype, colors[], pattern, material, formality 1-5, warmth 1-5, style_tags[], raw jsonb | single garments, tagged by the vision model. `wanted` = wishlist, optionally linked to a shop product |
+| `inspirations` | id, user_id, image_id, pin_id, source_url, style_tags[], palette[], formality, vibe, pieces jsonb, raw | whole looks (upload, URL or saved pin), tagged as a look; unique (user_id, pin_id) |
 | `styles` | id, name (unique), query, summary jsonb | shared style library |
 | `style_pins` | id, style_id, pin_url (unique), image_url, title | Pinterest reference pins |
 | `swipes` | (user_id, pin_id) PK, liked | preference signal |
@@ -83,7 +87,7 @@ uv run pytest          # 46 unit tests, ~0.5 s, all fakes (tests/fakes.py)
 | `products` | id, url (unique), name, description, price, currency, image_url, marketplace, query, raw | scraped products; also acts as the cache |
 | `recommendation_sets` | id, user_id, profile_id, params | one per shopping run |
 | `recommendations` | (set_id, product_id) PK, rank, reason, pairs_with uuid[] | `pairs_with` holds wardrobe item ids |
-| `product_feedback` | (user_id, product_id) PK, liked, bought | `bought=true` adds the item to the wardrobe |
+| `product_feedback` | (user_id, product_id) PK, liked, bought | `liked` creates a wanted item; `bought` flips it to owned |
 | `link_checks` | id, user_id, product_id, url, score 1-10, verdict jsonb | links the user pasted |
 | `outfits` | id, user_id, date, event, city, weather jsonb, item_ids uuid[], explanation, missing_item_tip, feedback jsonb | daily outfits |
 | `jobs` | id, kind, user_id, status (queued/running/done/failed), input, result, error | async work |
@@ -117,11 +121,36 @@ Job endpoints:
 ### Wardrobe
 | Method | Path | Body / params | Returns |
 |---|---|---|---|
-| POST | `/users/{uid}/wardrobe` | multipart: repeated `files` and/or repeated form `image_urls` | list of tagged items with signed `image_url` |
-| GET | `/users/{uid}/wardrobe` | `?category=&color=` | items with signed `image_url` |
+| POST | `/users/{uid}/wardrobe` | multipart: repeated `files` and/or repeated form `image_urls`, form `status=owned\|wanted` (default owned) | list of tagged items with signed `image_url` |
+| GET | `/users/{uid}/wardrobe` | `?status=owned\|wanted\|all` (default owned) `&category=&color=` | items with signed `image_url` |
 | GET | `/users/{uid}/wardrobe/{item_id}` | | item |
-| PATCH | `/users/{uid}/wardrobe/{item_id}` | `{category?, subtype?, colors?, pattern?, material?, formality?, warmth?, style_tags?}` | item (to fix wrong tags) |
+| PATCH | `/users/{uid}/wardrobe/{item_id}` | `{status?, category?, subtype?, colors?, pattern?, material?, fit?, formality?, warmth?, style_tags?, availability?}` (`availability`: available\|laundry\|lent\|stored) | item (to fix wrong tags) |
+| POST | `/users/{uid}/wardrobe/{item_id}/buy` | | item with `status=owned` (no re-upload or re-tagging) |
 | DELETE | `/users/{uid}/wardrobe/{item_id}` | | `{deleted}` |
+
+Items also carry `fit`, `availability` and `source_type` (upload\|product_url\|instagram\|pin) + `source_url`.
+
+### Imports from a URL (retailer page or Instagram)
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/users/{uid}/imports` | `{url, kind="auto"\|"product"\|"instagram", max_posts=12, import_items=false}` | **job**, see below. `url` may be a product page, a direct image URL, an Instagram profile/post/reel URL or a bare `@handle` |
+| GET | `/users/{uid}/imports` | | Instagram imports `{url, posts[{post_url, image_id, analysis}], style_profile, item_ids}`, newest first |
+
+- **Product page / image URL** → owned wardrobe item. The page is parsed cheaply first (JSON-LD `Product`, then OpenGraph); shops that block plain HTTP fall back to the Apify e-commerce scraper. The vision tagger also gets the page text (name, description, brand, material), so material and fit come out better than from the photo alone. Result `{kind:"product", item, product}`. (`POST /links` and product feedback use the same scraper.)
+- **Instagram** (public profiles only) → each post's first image is copied to Storage (IG CDN links expire) and analysed: `{has_outfit, items[], style_tags, colors, setting, vibe}`. The outfits are then aggregated into `style_profile {style_tags, preferred_colors, preferred_fit, avoid_tags, typical_formality_1to5, summary, confidence_0to1}`, saved on the user and used by `profile/compute`. With `import_items=true` the detected garments become owned items (`source_type=instagram`, all sharing the post image). Result `{kind:"instagram", import_id, posts_analysed, outfits, style_profile, items_added}`.
+
+### Inspirations (whole looks, not garments)
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| POST | `/users/{uid}/inspirations` | multipart: repeated `files` and/or repeated form `image_urls` | looks `{style_tags, palette, formality, vibe, pieces[{category, subtype, colors}], image_url}` |
+| POST | `/users/{uid}/inspirations/from-pin` | `{pin_id}` | promotes a swipe-deck pin to a look and records a like; idempotent |
+| GET | `/users/{uid}/inspirations` | | looks, newest first |
+| GET/DELETE | `/users/{uid}/inspirations/{id}` | | look / `{deleted}` |
+
+How each feature uses them:
+- **Daily outfit and recommendation `pairs_with`:** owned items only.
+- **Profile:** owned + wishlist (so it doesn't re-suggest them) + inspiration looks (the strongest taste signal).
+- **Link check:** compares against owned and wishlist items and reports `on_wishlist_as`.
 
 ### Style library (shared across users)
 | Method | Path | Body | Returns |
@@ -147,7 +176,7 @@ Job endpoints:
 |---|---|---|---|
 | POST | `/users/{uid}/recommendations` | `{n=5, per_query=6, marketplaces=["www.etsy.com"], queries?}` | **job**: e-commerce scrape per profile query, then LLM ranking. `result = {rec_set_id, count}` |
 | GET | `/users/{uid}/recommendations/{set_id}` | | `[{rank, reason, pairs_with[], products{...}}]` |
-| POST | `/users/{uid}/products/{product_id}/feedback` | `{liked?, bought=false}` | `bought=true` tags the product image and adds it to the wardrobe |
+| POST | `/users/{uid}/products/{product_id}/feedback` | `{liked?, bought=false}` | `liked` creates a wanted item linked to the product; `bought` flips it to owned (or creates an owned one). Returns `{item_id, status}` |
 
 ### Pasted links
 | Method | Path | Body | Returns |
@@ -169,7 +198,8 @@ Job endpoints:
 | Item tagging, selfie colour analysis, style summary, link verdict | Featherless `Qwen/Qwen3-VL-30B-A3B-Instruct` | images are sent as base64 or URLs |
 | Profile, ranking, outfit | Featherless `zai-org/GLM-5.3-Flash` | JSON-only prompts, parsed leniently |
 | Pinterest | Apify `epctex/pinterest-scraper` | ~$0.0015 per pin |
-| Products (search and links) | Apify `apify/e-commerce-scraping-tool` | `keyword`+`marketplaces` (Etsy works well; M&S didn't), or `detailsUrls` for any shop |
+| Instagram posts | Apify `apify/instagram-scraper` | `directUrls` + `resultsType=posts`; public profiles only |
+| Products (search and links) | JSON-LD/OpenGraph HTML parse, then Apify `apify/e-commerce-scraping-tool` | `keyword`+`marketplaces` (Etsy works well; M&S didn't), or `detailsUrls` for any shop |
 | Weather | Open-Meteo | free, no key |
 
 ## Notebook usage (sketch)

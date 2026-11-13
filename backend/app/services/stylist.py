@@ -5,9 +5,29 @@ from collections.abc import Sequence
 
 from ..ports import ChatModel
 
-TAG = """Identify the single main clothing item, shoe or accessory in this photo. Return ONLY JSON:
-{"category":"top|bottom|outerwear|shoes|dress|accessory","subtype":"","colors":[],"pattern":"","material":"",
- "formality_1to5":0,"warmth_1to5":0,"style_tags":[]}"""
+ITEM_SCHEMA = """{"category":"top|bottom|outerwear|shoes|dress|accessory","subtype":"","colors":["primary first"],
+ "pattern":"","material":"","fit":"slim|regular|relaxed|oversized","formality_1to5":0,"warmth_1to5":0,"style_tags":[]}"""
+
+TAG = "Identify the single main clothing item, shoe or accessory in this photo. Return ONLY JSON:\n" + ITEM_SCHEMA
+
+TAG_CONTEXT = """
+Product page text for this item (trust it for name, material and fit; trust the photo for colour):
+{context}"""
+
+POST = """This photo is from the user's own Instagram. Caption: {caption}
+Describe the clothing the main person wears (ignore other people). If no outfit is visible, return has_outfit false.
+Return ONLY JSON:
+{{"has_outfit":true,"items":[{item}],"style_tags":[],"colors":[],"setting":"e.g. office, street, beach","vibe":"one sentence"}}"""
+
+IG_STYLE = """Outfit analyses from the user's Instagram posts (newest first):
+{posts}
+Infer their personal style from what they actually wear repeatedly, not one-off looks. Return ONLY JSON:
+{{"style_tags":[],"preferred_colors":[],"preferred_fit":"slim|regular|relaxed|oversized","avoid_tags":[],
+  "typical_formality_1to5":0,"summary":"2 sentences","confidence_0to1":0}}"""
+
+LOOK = """This is an inspiration photo of a whole outfit/look. Describe the look. Return ONLY JSON:
+{"style_tags":[],"palette":[],"formality_1to5":0,"vibe":"one sentence",
+ "pieces":[{"category":"top|bottom|outerwear|shoes|dress|accessory","subtype":"","colors":[]}]}"""
 
 COLOR = """Do a seasonal colour analysis of this person (skin undertone, hair, eyes, contrast). Return ONLY JSON:
 {"season":"e.g. Soft Autumn","undertone":"warm|cool|neutral","contrast":"low|medium|high",
@@ -30,9 +50,10 @@ Pick the {n} best candidates for this user (skip irrelevant ones). Return ONLY J
 
 VERDICT = """Product: {product}
 User profile: {profile}
-Wardrobe: {wardrobe}
+Wardrobe (owned items + wishlist items): {wardrobe}
 Judge whether this product suits the user. Return ONLY JSON:
-{{"score_1to10":0,"pairs_with":["wardrobe ids"],"redundant_with":["wardrobe ids"],"verdict":"2 sentences"}}"""
+{{"score_1to10":0,"pairs_with":["owned ids"],"redundant_with":["owned ids"],"on_wishlist_as":["wishlist ids"],
+  "verdict":"2 sentences"}}"""
 
 OUTFIT = """Weather: {weather}. Event: {event}. Colour profile: {colors}.
 Recently worn item ids (avoid repeating): {recent}
@@ -63,8 +84,18 @@ class Stylist:
                 if attempt == self._retries:
                     raise
 
-    def tag_item(self, image_url: str) -> dict:
-        return self._ask(TAG, [image_url])
+    def tag_item(self, image_url: str, context: dict | None = None) -> dict:
+        prompt = TAG + (TAG_CONTEXT.format(context=_dump(context)) if context else "")
+        return self._ask(prompt, [image_url])
+
+    def analyse_post(self, image_url: str, caption: str | None) -> dict:
+        return self._ask(POST.format(caption=caption or "-", item=ITEM_SCHEMA), [image_url])
+
+    def instagram_style(self, posts: list[dict]) -> dict:
+        return self._ask(IG_STYLE.format(posts=_dump(posts)))
+
+    def tag_look(self, image_url: str) -> dict:
+        return self._ask(LOOK, [image_url])
 
     def color_analysis(self, image_url: str) -> dict:
         return self._ask(COLOR, [image_url])
@@ -78,7 +109,7 @@ class Stylist:
     def rank_products(self, profile: dict, wardrobe: list[dict], candidates: list[dict], n: int) -> list[dict]:
         return self._ask(RANK.format(profile=_dump(profile), wardrobe=_dump(wardrobe), candidates=_dump(candidates), n=n))
 
-    def link_verdict(self, product: dict, profile: dict, wardrobe: list[dict], image_url: str | None) -> dict:
+    def link_verdict(self, product: dict, profile: dict, wardrobe: dict, image_url: str | None) -> dict:
         prompt = VERDICT.format(product=_dump(product), profile=_dump(profile), wardrobe=_dump(wardrobe))
         return self._ask(prompt, [image_url] if image_url else [])
 

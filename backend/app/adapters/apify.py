@@ -1,13 +1,14 @@
-"""Apify-backed PinSource and ProductSource. Normalisers are pure functions (unit-tested)."""
+"""Apify-backed PinSource, ProductSource and SocialSource (Instagram). Normalisers are pure functions (unit-tested)."""
 from datetime import timedelta
 from decimal import Decimal
 
 from apify_client import ApifyClient
 
-from ..domain import Pin, Product
+from ..domain import Pin, Product, SocialPost
 
 PINTEREST_ACTOR = "epctex/pinterest-scraper"
 ECOMMERCE_ACTOR = "apify/e-commerce-scraping-tool"
+INSTAGRAM_ACTOR = "apify/instagram-scraper"
 
 
 class ApifyRunner:
@@ -48,6 +49,16 @@ def to_product(item: dict) -> Product | None:
     )
 
 
+def to_post(item: dict) -> SocialPost | None:
+    """Image post, carousel (childPosts) or video (thumbnail). Error rows (private/missing profile) have no images."""
+    urls = [item.get("displayUrl"), *(item.get("images") or []), *(c.get("displayUrl") for c in item.get("childPosts") or [])]
+    urls = tuple(dict.fromkeys(u for u in urls if isinstance(u, str) and u))
+    if not urls or not item.get("url"):
+        return None
+    return SocialPost(url=item["url"], image_urls=urls, caption=(item.get("caption") or "")[:1000] or None,
+                      timestamp=item.get("timestamp"))
+
+
 class ApifyPinSource:
     def __init__(self, runner: ApifyRunner):
         self._runner = runner
@@ -69,3 +80,15 @@ class ApifyProductSource:
 
     def details(self, url: str) -> list[Product]:
         return self._run({"detailsUrls": [{"url": url}], "maxProductResults": 1})
+
+
+class ApifyInstagramSource:
+    """Public profile or single post/reel URL → newest posts."""
+
+    def __init__(self, runner: ApifyRunner):
+        self._runner = runner
+
+    def posts(self, url: str, limit: int) -> list[SocialPost]:
+        items = self._runner.run(INSTAGRAM_ACTOR, {"directUrls": [url], "resultsType": "posts",
+                                                   "resultsLimit": limit, "addParentData": False})
+        return [p for p in map(to_post, items) if p][:limit]

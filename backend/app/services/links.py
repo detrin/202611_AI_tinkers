@@ -6,7 +6,7 @@ from .catalog import CatalogService
 from .profiles import ProfileService
 from .stylist import Stylist
 from .users import UserService
-from .wardrobe import WardrobeService, summarise
+from .wardrobe import WANTED, WardrobeService, summarise
 
 PRODUCT_FIELDS = ("id", "name", "price", "currency", "image_url", "url")
 
@@ -26,7 +26,8 @@ class LinkService:
         verdict = self._stylist.link_verdict(
             {k: product.get(k) for k in ("name", "price", "currency", "description")},
             {"style_mix": profile.get("style_mix"), "taste": profile.get("taste_summary")},
-            summarise(self._wardrobe.items(uid)), product.get("image_url"))
+            {"owned": summarise(self._wardrobe.items(uid)), "wishlist": summarise(self._wardrobe.items(uid, WANTED))},
+            product.get("image_url"))
         row = self._db.insert("link_checks", {"user_id": uid, "product_id": product["id"], "url": url,
                                               "score": verdict.get("score_1to10"), "verdict": verdict})
         return {"link_check_id": row["id"], "product": {k: product.get(k) for k in PRODUCT_FIELDS}, **verdict}

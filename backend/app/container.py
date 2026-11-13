@@ -2,10 +2,12 @@
 from dataclasses import dataclass
 
 from .config import Settings
-from .ports import ChatModel, Database, Executor, ImageFetcher, ImageStore, PinSource, ProductSource, WeatherProvider
+from .ports import ChatModel, Database, Executor, ImageFetcher, ImageStore, PinSource, ProductSource, SocialSource, WeatherProvider
 from .services.catalog import CatalogService
 from .services.feedback import ProductFeedbackService
 from .services.images import ImageService
+from .services.imports import ImportService
+from .services.inspirations import InspirationService
 from .services.jobs import JobService
 from .services.links import LinkService
 from .services.outfits import OutfitService
@@ -23,11 +25,13 @@ class Container:
     images: ImageService
     users: UserService
     wardrobe: WardrobeService
+    inspirations: InspirationService
     styles: StyleService
     preferences: PreferenceService
     profiles: ProfileService
     recommendations: RecommendationService
     feedback: ProductFeedbackService
+    imports: ImportService
     links: LinkService
     outfits: OutfitService
     jobs: JobService
@@ -35,19 +39,23 @@ class Container:
 
 
 def build_services(*, db: Database, store: ImageStore, fetcher: ImageFetcher, chat: ChatModel, pins: PinSource,
-                   products: ProductSource, weather: WeatherProvider, executor: Executor) -> Container:
+                   products: ProductSource, social: SocialSource, weather: WeatherProvider,
+                   executor: Executor) -> Container:
     stylist = Stylist(chat)
     images = ImageService(db, store, fetcher)
     users = UserService(db, images, stylist)
     wardrobe = WardrobeService(db, users, images, stylist)
     styles = StyleService(db, pins, stylist)
     prefs = PreferenceService(db)
-    profiles = ProfileService(db, users, wardrobe, styles, prefs, stylist)
+    inspirations = InspirationService(db, users, images, prefs, stylist)
+    profiles = ProfileService(db, users, wardrobe, inspirations, styles, prefs, stylist)
     catalog = CatalogService(db, products)
     return Container(
-        images=images, users=users, wardrobe=wardrobe, styles=styles, preferences=prefs, profiles=profiles,
+        images=images, users=users, wardrobe=wardrobe, inspirations=inspirations, styles=styles, preferences=prefs,
+        profiles=profiles,
         recommendations=RecommendationService(db, catalog, profiles, wardrobe, stylist),
-        feedback=ProductFeedbackService(db, images, wardrobe),
+        feedback=ProductFeedbackService(db, wardrobe),
+        imports=ImportService(db, users, images, wardrobe, catalog, social, stylist),
         links=LinkService(db, users, catalog, profiles, wardrobe, stylist),
         outfits=OutfitService(db, users, wardrobe, images, weather, stylist),
         jobs=JobService(db, executor), weather=weather,
@@ -58,9 +66,10 @@ def build_container(settings: Settings | None = None) -> Container:
     from apify_client import ApifyClient
     from supabase import create_client
 
-    from .adapters.apify import ApifyPinSource, ApifyProductSource, ApifyRunner
+    from .adapters.apify import ApifyInstagramSource, ApifyPinSource, ApifyProductSource, ApifyRunner
     from .adapters.executors import ThreadExecutor
     from .adapters.featherless import FeatherlessChat
+    from .adapters.html import FallbackProductSource, HtmlProductSource
     from .adapters.supabase import SupabaseDatabase, SupabaseImageStore
     from .adapters.web import HttpImageFetcher, OpenMeteoWeather
 
@@ -70,6 +79,7 @@ def build_container(settings: Settings | None = None) -> Container:
     return build_services(
         db=SupabaseDatabase(client), store=SupabaseImageStore(client, s.bucket, s.signed_url_ttl),
         fetcher=HttpImageFetcher(), chat=FeatherlessChat.create(s.featherless_key, s.vision_model, s.text_model),
-        pins=ApifyPinSource(runner), products=ApifyProductSource(runner), weather=OpenMeteoWeather(),
+        pins=ApifyPinSource(runner), products=FallbackProductSource(HtmlProductSource(), ApifyProductSource(runner)),
+        social=ApifyInstagramSource(runner), weather=OpenMeteoWeather(),
         executor=ThreadExecutor(s.job_workers),
     )

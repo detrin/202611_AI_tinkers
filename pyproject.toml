@@ -11,6 +11,7 @@ dependencies = [
     "nbformat>=5.11.1",
     "openai>=3.50.0",
     "pillow>=13.0.0",
+    "pydantic-ai-slim[openai]>=2.68.0",
     "python-multipart>=0.0.33",
     "requests>=2.34.2",
     "supabase>=2.34.1",

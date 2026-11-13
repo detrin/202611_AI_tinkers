@@ -3,7 +3,7 @@ from collections.abc import Callable, Sequence
 from datetime import date
 from typing import Protocol
 
-from .domain import Pin, Product
+from .domain import Pin, Product, SocialPost
 
 Row = dict
 
@@ -38,6 +38,10 @@ class PinSource(Protocol):
 class ProductSource(Protocol):
     def search(self, query: str, marketplaces: list[str], limit: int) -> list[Product]: ...
     def details(self, url: str) -> list[Product]: ...
+
+
+class SocialSource(Protocol):
+    def posts(self, url: str, limit: int) -> list[SocialPost]: ...
 
 
 class WeatherProvider(Protocol):

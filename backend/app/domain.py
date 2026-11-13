@@ -35,3 +35,22 @@ class Product:
     image_url: str | None = None
     marketplace: str | None = None
     raw: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SocialPost:
+    url: str
+    image_urls: tuple[str, ...]
+    caption: str | None = None
+    timestamp: str | None = None
+
+
+def sniff_mime(content: bytes, default: str = "image/jpeg") -> str:
+    """Best-effort image type from magic bytes (shops often serve png/webp behind .jpg URLs)."""
+    if content.startswith(b"\x89PNG"):
+        return "image/png"
+    if content[:4] == b"RIFF" and content[8:12] == b"WEBP":
+        return "image/webp"
+    if content[:3] == b"GIF":
+        return "image/gif"
+    return default

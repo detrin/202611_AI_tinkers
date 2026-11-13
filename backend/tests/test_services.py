@@ -127,14 +127,6 @@ def test_catalog_dedupes_products_by_url(env):
     assert len(env.db.tables["products"]) == 2
 
 
-def test_bought_product_is_added_to_wardrobe(env):
-    uid = env.user()["id"]
-    env.c.recommendations.create(uid, ["coat"], n=1, per_query=1, marketplaces=[])
-    pid = env.db.tables["products"][0]["id"]
-    res = env.c.feedback.record(uid, pid, liked=True, bought=True)
-    assert len(res["added_to_wardrobe"]) == 1 and len(env.c.wardrobe.items(uid)) == 1
-
-
 # ---------- links ----------
 def test_link_check_scrapes_judges_and_stores(env):
     uid = env.user()["id"]

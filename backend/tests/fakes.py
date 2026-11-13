@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from backend.app.domain import Pin, Product
+from backend.app.domain import Pin, Product, SocialPost
 
 _clock = itertools.count()
 _EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -82,7 +82,8 @@ class FakeFetcher:
 class ScriptedChat:
     """Answers by prompt type. Override with chat.answers[kind] = obj (JSON-dumped) or str (raw)."""
 
-    KINDS = {"tag": "Identify the single main", "color": "seasonal colour analysis", "style": "Pinterest reference",
+    KINDS = {"post": "Describe the clothing the main person", "ig_style": "Infer their personal style",
+             "tag": "Identify the single main", "look": "inspiration photo of a whole outfit", "color": "seasonal colour analysis", "style": "Pinterest reference",
              "profile": "Build the user's style profile", "rank": "Candidate products",
              "verdict": "Judge whether this product", "outfit": "Build the best outfit"}
 
@@ -91,6 +92,8 @@ class ScriptedChat:
         self.answers = {
             "tag": {"category": "top", "subtype": "t-shirt", "colors": ["white"], "pattern": "solid",
                     "material": "cotton", "formality_1to5": 2, "warmth_1to5": 1, "style_tags": ["casual"]},
+            "look": {"style_tags": ["old money"], "palette": ["camel", "navy"], "formality_1to5": 4, "vibe": "polished",
+                     "pieces": [{"category": "outerwear", "subtype": "camel coat", "colors": ["camel"]}]},
             "color": {"season": "Soft Autumn", "best_colors": ["olive"], "avoid_colors": ["neon"]},
             "style": {"key_items": ["trench"], "palette": ["beige"], "vibe": "calm"},
             "profile": {"style_mix": [{"style": "minimal", "percent": 100, "why": "x"}], "taste_summary": "clean",
@@ -98,6 +101,11 @@ class ScriptedChat:
             "rank": [],
             "verdict": {"score_1to10": 7, "pairs_with": [], "redundant_with": [], "verdict": "good"},
             "outfit": {"item_ids": [], "explanation": "fine", "missing_item_tip": ""},
+            "post": {"has_outfit": True, "style_tags": ["minimal"], "colors": ["navy"], "vibe": "clean",
+                     "items": [{"category": "top", "subtype": "shirt", "colors": ["navy"], "fit": "regular"},
+                               {"category": "bottom", "subtype": "chinos", "colors": ["beige"], "fit": "slim"}]},
+            "ig_style": {"style_tags": ["minimal", "classic"], "preferred_colors": ["navy", "beige"],
+                         "preferred_fit": "regular", "avoid_tags": ["large_logos"], "summary": "clean"},
         }
 
     def kind(self, prompt):
@@ -142,3 +150,13 @@ class FakeWeather:
     def daily(self, city, day: date | None = None):
         self.calls.append((city, day))
         return {"city": city, "temperature_2m_max": 8, "temperature_2m_min": 2, "precipitation_probability_max": 90}
+
+
+class FakeSocial:
+    def __init__(self, n: int = 3):
+        self.n, self.urls = n, []
+
+    def posts(self, url, limit):
+        self.urls.append(url)
+        return [SocialPost(url=f"https://ig/p/{i}", image_urls=(f"https://igcdn/{i}.jpg",), caption=f"look {i}")
+                for i in range(min(self.n, limit))]
