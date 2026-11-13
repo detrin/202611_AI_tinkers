@@ -325,3 +325,13 @@ h3 { font-size: 15px; font-weight: 650; }
 
 .context p span small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
 .context p.later { opacity: 0.7; font-size: 14px; }
+
+/* next plan: tap to unfold the plans after it */
+.plan-toggle { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 0; font-size: 15px; font-weight: 500; }
+.plan-toggle > span { flex: 1; min-width: 0; }
+.plan-toggle small { display: block; font-size: 12px; color: var(--ink-2); font-weight: 400; }
+.plan-toggle .chev { flex: none; color: var(--ink-2); transition: transform 220ms ease-out; }
+.plan-toggle .chev.open { transform: rotate(90deg); }
+.plans { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 260ms ease-out, opacity 220ms ease-out; }
+.plans.open { grid-template-rows: 1fr; opacity: 1; }
+.plans > div { overflow: hidden; }

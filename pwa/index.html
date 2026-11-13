@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f7f6f2" />
+    <!-- Status bar colour = page background (--bg in styles.css), in both themes. -->
+    <meta name="theme-color" content="#f7f6f2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#131412" media="(prefers-color-scheme: dark)" />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // Browsers that ignore the media attribute (or the manifest colour of an installed app) get one plain tag, kept in sync.
+      ;(function () {
+        var dark = matchMedia('(prefers-color-scheme: dark)')
+        var tag = document.createElement('meta')
+        tag.name = 'theme-color'
+        function sync() { tag.content = dark.matches ? '#131412' : '#f7f6f2' }
+        sync()
+        document.head.prepend(tag)
+        dark.addEventListener ? dark.addEventListener('change', sync) : dark.addListener(sync)
+      })()
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon-192.png" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />

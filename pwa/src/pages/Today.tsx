@@ -26,6 +26,7 @@ export default function Today({ active, version }: { active: boolean; version: n
   const [openItem, setOpenItem] = useState<Item | null>(null)
   const [checking, setChecking] = useState(false)
   const started = useRef(false)
+  const [showPlans, setShowPlans] = useState(false)
   // Outfits already shown in this session, so swiping one away never brings the same one back.
   const shown = useRef<string[]>(saved.current ? [comboKey(saved.current.outfit.item_ids)] : [])
 
@@ -154,22 +155,27 @@ export default function Today({ active, version }: { active: boolean; version: n
         ))}
         {events.length === 0 && (
           <>
-            <p>
+            <button className="plan-toggle" onClick={() => setShowPlans((v) => !v)} aria-expanded={showPlans}>
               <CalendarDays size={18} />
               <span>
                 {occasion.time && `${occasion.time} · `}{occasion.title}
-                <small>Dressing for this</small>
+                <small>Dressing for this · {showPlans ? 'hide what comes next' : 'tap to see what comes next'}</small>
               </span>
-            </p>
-            {PLANS.filter((p) => !occasion.title.startsWith(p.title)).slice(0, 3).map((p) => (
-              <p key={`${p.day}-${p.time}`} className="later">
-                <CalendarDays size={18} />
-                <span>
-                  {p.day ? 'Tomorrow ' : ''}{p.time} · {p.title}
-                  <small>{p.location}</small>
-                </span>
-              </p>
-            ))}
+              <ChevronRight size={18} className={`chev ${showPlans ? 'open' : ''}`} />
+            </button>
+            <div className={`plans ${showPlans ? 'open' : ''}`}>
+              <div>
+                {PLANS.filter((p) => !occasion.title.startsWith(p.title)).map((p) => (
+                  <p key={`${p.day}-${p.time}`} className="later">
+                    <CalendarDays size={18} />
+                    <span>
+                      {p.day ? 'Tomorrow ' : ''}{p.time} · {p.title}
+                      <small>{p.location}</small>
+                    </span>
+                  </p>
+                ))}
+              </div>
+            </div>
             <p>
               <CloudSun size={18} />
               <span>{weather ? `${weather}${outfit?.city ? ` · ${outfit.city}` : ''}` : 'Weather loads with the outfit'}</span>

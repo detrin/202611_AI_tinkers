@@ -81,11 +81,11 @@ export const PLANS: Plan[] = [
   { day: 1, time: '19:30', title: 'Dinner date', location: 'Fine dining restaurant, Malá Strana' },
 ]
 
-/** The next plan that has not started more than an hour ago; tomorrow's first plan once today is over. */
+/** The next plan that started less than 90 minutes ago (19:30 stays until 21:00); tomorrow's first once today is over. */
 export function nextPlan(now = new Date()): Plan | undefined {
   const minutes = now.getHours() * 60 + now.getMinutes()
   const mins = (p: Plan) => +p.time.slice(0, 2) * 60 + +p.time.slice(3)
-  return PLANS.find((p) => p.day === 0 && mins(p) + 60 > minutes) ?? PLANS.find((p) => p.day === 1)
+  return PLANS.find((p) => p.day === 0 && mins(p) + 90 > minutes) ?? PLANS.find((p) => p.day === 1)
 }
 
 export const getOccasion = (): Occasion => load('occasion', { title: 'Casual day', time: '', profile_id: 'weekend' })
